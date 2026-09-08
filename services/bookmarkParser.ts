@@ -68,12 +68,17 @@ export const parseBookmarks = async (file: File): Promise<ImportResult> => {
             // It's a link
             const title = a.textContent || a.getAttribute('href') || 'No Title';
             const url = a.getAttribute('href');
-            
+            // 备注：Chrome 书签中 <DD> 是 <DT> 的后一个兄弟节点，包含描述文本
+            const dd = node.nextElementSibling && node.nextElementSibling.tagName === 'DD'
+                ? (node.nextElementSibling.textContent || '').trim()
+                : '';
+
             if (url && !url.startsWith('chrome://') && !url.startsWith('about:')) {
                 links.push({
                     id: generateId(),
                     title: title,
                     url: url,
+                    description: dd || undefined,
                     categoryId: getCategoryId(currentCategoryName),
                     createdAt: Date.now(),
                     icon: a.getAttribute('icon') || undefined
