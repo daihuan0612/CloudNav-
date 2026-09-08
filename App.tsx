@@ -26,6 +26,8 @@ const GITHUB_REPO_URL = 'https://github.com/daihuan0612/CloudNav-';
 
 const LOCAL_STORAGE_KEY = 'cloudnav_data_cache';
 const AUTH_KEY = 'cloudnav_auth_token';
+const AUTH_EXPIRY_KEY = 'cloudnav_auth_expiry';
+const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天免密
 const WEBDAV_CONFIG_KEY = 'cloudnav_webdav_config';
 const AI_CONFIG_KEY = 'cloudnav_ai_config';
 const SEARCH_ENGINES_KEY = 'cloudnav_search_engines';
@@ -191,7 +193,14 @@ function App() {
       document.documentElement.classList.add('dark');
     }
     const savedToken = localStorage.getItem(AUTH_KEY);
-    if (savedToken) setAuthToken(savedToken);
+    const savedExpiry = localStorage.getItem(AUTH_EXPIRY_KEY);
+    if (savedToken && savedExpiry && Date.now() < Number(savedExpiry)) {
+      setAuthToken(savedToken);
+    } else {
+      // 过期或格式异常：清除登录态，回到解锁界面
+      localStorage.removeItem(AUTH_KEY);
+      localStorage.removeItem(AUTH_EXPIRY_KEY);
+    }
 
     const savedWebDav = localStorage.getItem(WEBDAV_CONFIG_KEY);
     if (savedWebDav) {
@@ -236,6 +245,7 @@ function App() {
                 // 密码已失效，清除登录态回到解锁界面
                 setAuthToken('');
                 localStorage.removeItem(AUTH_KEY);
+                localStorage.removeItem(AUTH_EXPIRY_KEY);
                 return;
             }
         } catch (e) {
@@ -340,6 +350,7 @@ function App() {
         if (response.ok) {
             setAuthToken(password);
             localStorage.setItem(AUTH_KEY, password);
+            localStorage.setItem(AUTH_EXPIRY_KEY, String(Date.now() + AUTH_TTL_MS));
             setIsAuthOpen(false);
             setSyncStatus('saved');
             return true;
@@ -567,6 +578,7 @@ function App() {
         onUnlocked={(pwd) => {
           setAuthToken(pwd);
           localStorage.setItem(AUTH_KEY, pwd);
+          localStorage.setItem(AUTH_EXPIRY_KEY, String(Date.now() + AUTH_TTL_MS));
         }}
       />
     );
