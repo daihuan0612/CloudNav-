@@ -528,11 +528,11 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-2' : 'p-3'} bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:border-blue-200 dark:hover:border-slate-600 hover:-translate-y-0.5 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-750`}
+            className={`group relative flex flex-col ${isSimple ? 'p-2.5' : 'p-3.5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift hover:border-blue-300/60 dark:hover:border-blue-500/30 fade-up`}
             title={link.description || link.url}
         >
             <div className={`flex items-center gap-3 ${isSimple ? '' : 'mb-1.5'} pr-6`}>
-                <div className={`${isSimple ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'} rounded-lg bg-slate-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden`}>
+                <div className={`${isSimple ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
                     {iconDisplay}
                 </div>
                 <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
@@ -549,7 +549,13 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden text-slate-900 dark:text-slate-50">
+    <div className="flex h-screen overflow-hidden text-slate-900 dark:text-slate-50 relative bg-slate-50 dark:bg-slate-900">
+      {/* 背景光斑装饰 */}
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-blue-400/15 dark:bg-blue-500/10 blur-3xl" />
+        <div className="absolute top-1/4 -right-44 w-[560px] h-[560px] rounded-full bg-purple-400/12 dark:bg-purple-500/10 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 w-[460px] h-[340px] rounded-full bg-indigo-300/12 dark:bg-indigo-500/10 blur-3xl" />
+      </div>
       
       {/* Right Click Context Menu */}
       {contextMenu && (
@@ -673,12 +679,12 @@ function App() {
       <aside 
         className={`
           fixed lg:static inset-y-0 left-0 z-30 w-64 transform transition-transform duration-300 ease-in-out
-          bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col
+          bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-700/60 flex flex-col
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        <div className="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-700 shrink-0 gap-3">
-             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/30 overflow-hidden">
+        <div className="h-16 flex items-center px-6 border-b border-slate-200/60 dark:border-slate-700/60 shrink-0 gap-3">
+             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/30 overflow-hidden ring-1 ring-white/20">
                  {siteSettings.favicon ? (
                     <img src={siteSettings.favicon} alt="" className="w-full h-full object-cover" />
                  ) : (
@@ -693,10 +699,10 @@ function App() {
         <div className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-hide">
             <button
               onClick={() => scrollToCategory('all')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 activeCategory === 'all' 
-                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' 
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  ? 'bg-gradient-to-r from-blue-500/12 to-indigo-500/8 dark:from-blue-500/15 dark:to-indigo-500/10 text-blue-600 dark:text-blue-400 font-medium shadow-sm ring-1 ring-blue-500/20' 
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-700/60'
               }`}
             >
               <div className="p-1"><Icon name="LayoutGrid" size={18} /></div>
@@ -722,13 +728,13 @@ function App() {
                   <button
                     key={cat.id}
                     onClick={() => scrollToCategory(cat.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group ${
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 group ${
                       activeCategory === cat.id 
-                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' 
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        ? 'bg-gradient-to-r from-blue-500/12 to-indigo-500/8 dark:from-blue-500/15 dark:to-indigo-500/10 text-blue-600 dark:text-blue-400 font-medium shadow-sm ring-1 ring-blue-500/20' 
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-700/60'
                     }`}
                   >
-                    <div className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${activeCategory === cat.id ? 'bg-blue-100 dark:bg-blue-800' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                    <div className={`p-1.5 rounded-lg transition-all duration-200 flex items-center justify-center ${activeCategory === cat.id ? 'bg-gradient-to-br from-blue-500/15 to-indigo-500/15 dark:from-blue-500/25 dark:to-indigo-500/20 scale-105' : 'bg-slate-100/80 dark:bg-slate-800/80'}`}>
                       {isLocked ? <Lock size={16} className="text-amber-500" /> : (isEmoji ? <span className="text-base leading-none">{cat.icon}</span> : <Icon name={cat.icon} size={16} />)}
                     </div>
                     <span className="truncate flex-1 text-left">{cat.name}</span>
@@ -738,11 +744,11 @@ function App() {
             })}
         </div>
 
-        <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
+        <div className="p-4 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 backdrop-blur-md shrink-0">
             <div className="grid grid-cols-4 gap-2 mb-2">
                 <button 
                     onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsImportModalOpen(true); }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-xl border border-slate-200/70 dark:border-slate-600/60 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-blue-300/60 dark:hover:border-blue-500/30"
                     title="导入书签"
                 >
                     <Upload size={14} />
@@ -750,7 +756,7 @@ function App() {
                 </button>
                 <button 
                     onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsBackupModalOpen(true); }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-xl border border-slate-200/70 dark:border-slate-600/60 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-blue-300/60 dark:hover:border-blue-500/30"
                     title="备份与恢复"
                 >
                     <CloudCog size={14} />
@@ -758,7 +764,7 @@ function App() {
                 </button>
                 <button 
                     onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsDeadLinkCheckOpen(true); }}
-                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-xl border border-slate-200/70 dark:border-slate-600/60 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-blue-300/60 dark:hover:border-blue-500/30"
                     title="死链检测"
                 >
                     <Activity size={14} />
@@ -766,7 +772,7 @@ function App() {
                 </button>
                 <button 
                     onClick={() => setIsSettingsModalOpen(true)}
-                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-xl border border-slate-200/70 dark:border-slate-600/60 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-blue-300/60 dark:hover:border-blue-500/30"
                     title="AI 设置"
                 >
                     <Settings size={14} />
@@ -797,9 +803,9 @@ function App() {
 
       <main 
           ref={mainRef}
-          className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto relative scroll-smooth"
+          className="flex-1 flex flex-col h-full overflow-y-auto relative scroll-smooth"
       >
-        <header className="h-16 px-4 lg:px-8 flex items-center justify-between bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0">
+        <header className="h-16 px-4 lg:px-8 flex items-center justify-between bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 z-30 shrink-0">
           <div className="flex items-center gap-4 flex-1">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300">
               <Menu size={24} />
@@ -808,12 +814,12 @@ function App() {
             {/* Redesigned Search Bar */}
             <div className="relative w-full max-w-xl hidden sm:flex items-center gap-3">
                 {/* Search Mode Toggle (Pill) */}
-                <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-full flex items-center shrink-0">
+                <div className="bg-slate-100/80 dark:bg-slate-700/70 p-1 rounded-full flex items-center shrink-0 shadow-inner">
                     <button
                         onClick={() => setSearchMode('local')}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+                        className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
                             searchMode === 'local' 
-                            ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' 
+                            ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-md' 
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                     >
@@ -821,9 +827,9 @@ function App() {
                     </button>
                     <button
                         onClick={() => setSearchMode('external')}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+                        className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
                             searchMode === 'external' 
-                            ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm' 
+                            ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-md' 
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
                         }`}
                     >
@@ -850,7 +856,7 @@ function App() {
                         placeholder={searchMode === 'local' ? "搜索书签..." : `在 ${activeExternalEngine?.name} 搜索...`}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700/50 hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:hover:border-slate-600 rounded-full text-sm dark:text-white placeholder-slate-400 outline-none transition-all focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-blue-500/50"
+                        className="w-full pl-10 pr-4 py-2 bg-white/70 dark:bg-slate-700/40 hover:bg-white dark:hover:bg-slate-700/70 border border-slate-200/70 dark:border-slate-600/40 rounded-full text-sm dark:text-white placeholder-slate-400 outline-none transition-all duration-200 focus:bg-white dark:focus:bg-slate-700/90 focus:ring-2 focus:ring-blue-500/40 focus:shadow-glow"
                     />
                     <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center gap-2">
                         {searchMode === 'local' ? (
@@ -902,7 +908,7 @@ function App() {
 
             <button
               onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(undefined); setIsModalOpen(true); }}}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-full text-sm font-medium shadow-lg shadow-blue-500/30"
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-full text-sm font-medium shadow-lg shadow-blue-500/30 transition-all duration-200 hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0"
             >
               <Plus size={16} /> <span className="hidden sm:inline">添加</span>
             </button>
@@ -939,7 +945,8 @@ function App() {
 
                 return (
                     <section key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-24">
-                        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-3 mb-4 pb-2 border-b border-slate-200/50 dark:border-slate-800">
+                             <span className="cat-bar"></span>
                              <div className="text-slate-400">
                                 {cat.icon && cat.icon.length <= 4 && !/^[a-zA-Z]+$/.test(cat.icon) ? <span className="text-lg">{cat.icon}</span> : <Icon name={cat.icon} size={20} />}
                              </div>
