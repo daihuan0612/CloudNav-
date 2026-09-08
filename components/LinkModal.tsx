@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Loader2, Pin, AlertTriangle, Wand2, Image as ImageIcon } from 'lucide-react';
 import { LinkItem, Category, AIConfig } from '../types';
+import { getFaviconUrl } from '../utils/favicon';
 import { generateLinkDescription, suggestCategory } from '../services/geminiService';
 
 interface LinkModalProps {
@@ -61,10 +62,8 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, categori
             normalizedUrl = 'https://' + targetUrl;
         }
         
-        // Use Google's specialized favicon service which is more robust
-        // t2.gstatic.com is used by Chrome internal pages
-        // fallback_opts=TYPE,SIZE,URL ensures it tries multiple ways to get an icon
-        const newIcon = `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(normalizedUrl)}&size=128`;
+        // 直抓站点 favicon.ico（国内网络可用，无需第三方服务）
+        const newIcon = getFaviconUrl(normalizedUrl);
         
         setIconUrl(newIcon);
       } catch (e) {

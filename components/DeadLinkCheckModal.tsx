@@ -4,6 +4,7 @@ import {
   Trash2, Loader2
 } from 'lucide-react';
 import { LinkItem } from '../types';
+import { handleIconError } from '../utils/favicon';
 
 type LocalState = 'ok' | 'fail' | 'na';
 type RemoteState = 'ok' | 'fail' | 'na';
@@ -303,7 +304,7 @@ export default function DeadLinkCheckModal({
                       >
                         <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
                           {link.icon ? (
-                            <img src={link.icon} alt="" className="w-full h-full object-contain" />
+                            <img src={link.icon} alt="" className="w-full h-full object-contain" onError={(e) => handleIconError(e, link.url, link.title)} />
                           ) : (
                             link.title.charAt(0)
                           )}

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { X, Search, Plus, Trash2, Check, Globe, Wand2 } from 'lucide-react';
 import { SearchEngine } from '../types';
+import { getFaviconUrl, handleIconError } from '../utils/favicon';
 
 interface SearchSettingsModalProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ const SearchSettingsModal: React.FC<SearchSettingsModalProps> = ({
         const origin = urlObj.origin;
         
         // 使用 Google 的 favicon 服务获取图标
-        const newIconUrl = `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin)}&size=128`;
+        const newIconUrl = getFaviconUrl(normalizedUrl);
         
         setNewIcon(newIconUrl);
       } catch (e) {
@@ -184,7 +185,7 @@ const SearchSettingsModal: React.FC<SearchSettingsModalProps> = ({
                                      <img 
                                         src={newIcon} 
                                         className="w-full h-full object-contain"
-                                        onError={(e) => {e.currentTarget.style.display='none'}}
+                                        onError={(e) => handleIconError(e, newUrl, '搜')}
                                      />
                                 ) : (
                                     <Globe size={18} className="text-slate-400"/>

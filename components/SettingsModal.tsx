@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
 import { AIConfig, LinkItem, Category, SiteSettings } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
+import { handleIconError } from '../utils/favicon';
 import JSZip from 'jszip';
 
 interface SettingsModalProps {
@@ -442,7 +443,7 @@ async function saveLink(title, url, categoryId, icon = '') {
     if (!icon) {
         try {
             const u = new URL(url);
-            icon = \`https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=\${encodeURIComponent(u.origin)}&size=128\`;
+            icon = \`https://\${u.hostname}/favicon.ico\`;
         } catch(e){}
     }
 
@@ -1080,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             <GripVertical size={16} />
                                         </div>
                                         <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-600 flex items-center justify-center text-xs overflow-hidden">
-                                            {link.icon ? <img src={link.icon} className="w-full h-full object-cover"/> : link.title.charAt(0)}
+                                            {link.icon ? <img src={link.icon} className="w-full h-full object-cover" onError={(e) => handleIconError(e, link.url, link.title)} /> : link.title.charAt(0)}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-medium dark:text-slate-200 truncate">{link.title}</div>

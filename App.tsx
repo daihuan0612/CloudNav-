@@ -11,6 +11,7 @@ import {
     WebDavConfig, AIConfig, SiteSettings, SearchEngine, DEFAULT_SEARCH_ENGINES 
 } from './types';
 import Icon from './components/Icon';
+import { handleIconError } from './utils/favicon';
 import LinkModal from './components/LinkModal';
 import AuthModal from './components/AuthModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
@@ -542,10 +543,7 @@ function App() {
             src={link.icon} 
             alt="" 
             className="w-7 h-7 object-contain" 
-            onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement!.innerText = link.title.charAt(0);
-            }}
+            onError={(e) => handleIconError(e, link.url, link.title)}
          />
       ) : link.title.charAt(0);
       
