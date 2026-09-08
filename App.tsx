@@ -20,6 +20,7 @@ import ImportModal from './components/ImportModal';
 import SettingsModal from './components/SettingsModal';
 import SearchSettingsModal from './components/SearchSettingsModal';
 import DeadLinkCheckModal from './components/DeadLinkCheckModal';
+import UnlockScreen from './components/UnlockScreen';
 
 const GITHUB_REPO_URL = 'https://github.com/daihuan0612/CloudNav-';
 
@@ -212,10 +213,16 @@ function App() {
         setEditingLink(undefined);
         setIsModalOpen(true);
     }
+  }, []);
 
+  // 解锁后（拿到访问密码）才从云端拉取数据
+  useEffect(() => {
+    if (!authToken) return;
     const initData = async () => {
         try {
-            const res = await fetch('/api/storage');
+            const res = await fetch('/api/storage', {
+                headers: { 'x-auth-password': authToken }
+            });
             if (res.ok) {
                 const data = await res.json();
                 if (data.links && data.links.length > 0) {
@@ -225,7 +232,12 @@ function App() {
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
                     return;
                 }
-            } 
+            } else if (res.status === 401) {
+                // 密码已失效，清除登录态回到解锁界面
+                setAuthToken('');
+                localStorage.removeItem(AUTH_KEY);
+                return;
+            }
         } catch (e) {
             console.warn("Failed to fetch from cloud, falling back to local.", e);
         }
@@ -233,7 +245,7 @@ function App() {
     };
 
     initData();
-  }, []);
+  }, [authToken]);
 
   useEffect(() => {
       document.title = siteSettings.title || 'CloudNav';
@@ -547,6 +559,18 @@ function App() {
         </a>
       );
   };
+
+  // 纯私有模式：未解锁（无访问密码）时只渲染解锁界面，不渲染任何导航内容
+  if (!authToken) {
+    return (
+      <UnlockScreen
+        onUnlocked={(pwd) => {
+          setAuthToken(pwd);
+          localStorage.setItem(AUTH_KEY, pwd);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden text-slate-900 dark:text-slate-50 relative bg-slate-50 dark:bg-slate-900">
