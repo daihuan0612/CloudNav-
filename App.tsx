@@ -4,7 +4,7 @@ import {
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
   Pin, Settings, Lock, CloudCog, Github, GitFork, MoreVertical,
-  QrCode, Copy, LayoutGrid, List, Check, ExternalLink, ArrowRight
+  QrCode, Copy, LayoutGrid, List, Check, ExternalLink, ArrowRight, Activity
 } from 'lucide-react';
 import { 
     LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, 
@@ -19,8 +19,9 @@ import CategoryAuthModal from './components/CategoryAuthModal';
 import ImportModal from './components/ImportModal';
 import SettingsModal from './components/SettingsModal';
 import SearchSettingsModal from './components/SearchSettingsModal';
+import DeadLinkCheckModal from './components/DeadLinkCheckModal';
 
-const GITHUB_REPO_URL = 'https://github.com/sese972010/CloudNav-';
+const GITHUB_REPO_URL = 'https://github.com/daihuan0612/CloudNav-';
 
 const LOCAL_STORAGE_KEY = 'cloudnav_data_cache';
 const AUTH_KEY = 'cloudnav_auth_token';
@@ -107,6 +108,7 @@ function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isDeadLinkCheckOpen, setIsDeadLinkCheckOpen] = useState(false);
   const [catAuthModalData, setCatAuthModalData] = useState<Category | null>(null);
   
   const [editingLink, setEditingLink] = useState<LinkItem | undefined>(undefined);
@@ -651,6 +653,14 @@ function App() {
         onSelectEngine={setActiveEngineId}
       />
 
+      <DeadLinkCheckModal
+        isOpen={isDeadLinkCheckOpen}
+        onClose={() => setIsDeadLinkCheckOpen(false)}
+        links={links}
+        authToken={authToken}
+        onDeleteLink={handleDeleteLink}
+      />
+
       {/* Sidebar Mobile Overlay */}
       {sidebarOpen && (
         <div 
@@ -729,7 +739,7 @@ function App() {
         </div>
 
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
-            <div className="grid grid-cols-3 gap-2 mb-2">
+            <div className="grid grid-cols-4 gap-2 mb-2">
                 <button 
                     onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsImportModalOpen(true); }}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
@@ -745,6 +755,14 @@ function App() {
                 >
                     <CloudCog size={14} />
                     <span>备份</span>
+                </button>
+                <button 
+                    onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsDeadLinkCheckOpen(true); }}
+                    className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
+                    title="死链检测"
+                >
+                    <Activity size={14} />
+                    <span>检测</span>
                 </button>
                 <button 
                     onClick={() => setIsSettingsModalOpen(true)}
