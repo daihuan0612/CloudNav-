@@ -553,10 +553,12 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-3' : 'p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift hover:border-blue-300/60 dark:hover:border-blue-500/30 fade-up`}
+            className={`group relative flex flex-col ${isSimple ? 'p-3' : 'p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up`}
             title={link.description || link.url}
         >
-            <div className={`flex items-center gap-3 ${isSimple ? '' : 'mb-2'} pr-6`}>
+            {/* hover 渐变盖层（对齐老站 site-card::before） */}
+            <div aria-hidden="true" className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            <div className={`relative flex items-center gap-3 ${isSimple ? '' : 'mb-2'} pr-6`}>
                 <div className={`${isSimple ? 'w-8 h-8 text-sm' : 'w-12 h-12 text-xl'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
                     {iconDisplay}
                 </div>
