@@ -361,19 +361,34 @@ function App() {
       }
   };
 
-  const handleImportConfirm = (newLinks: LinkItem[], newCategories: Category[], mode?: 'original' | 'merge') => {
+  const handleImportConfirm = (newLinks: LinkItem[], newCategories: Category[], mode?: 'original' | 'merge' | 'ai') => {
       const mergedCategories = [...categories];
       newCategories.forEach(nc => {
           if (!mergedCategories.some(c => c.id === nc.id || c.name === nc.name)) {
               mergedCategories.push(nc);
           }
       });
-      // original（保持原目录结构）：以导入文件为准替换全部链接，避免重复累积
-      // merge（合并）：追加新链接到现有数据
-      const mergedLinks = mode === 'original' ? newLinks : [...links, ...newLinks];
+      // 统一合并：现有链接全部保留；导入链接按 URL 去重，重复的以新文件为准覆盖（含备注），
+      // 不重复的追加。不再清空现有数据（原 original 模式直接替换导致现有分类条目全空）
+      const normalizeUrl = (u?: string) => (u || '').trim().replace(/\/$/, '');
+      const mergedLinks = [...links];
+      newLinks.forEach(nl => {
+          const idx = mergedLinks.findIndex(l => normalizeUrl(l.url) === normalizeUrl(nl.url));
+          if (idx >= 0) {
+              // 覆盖：保留现有 id 与 pinned 状态，其余字段（标题/链接/备注/图标/分类）以新为准
+              mergedLinks[idx] = {
+                  ...mergedLinks[idx],
+                  ...nl,
+                  id: mergedLinks[idx].id,
+                  pinned: mergedLinks[idx].pinned ?? nl.pinned,
+              };
+          } else {
+              mergedLinks.push(nl);
+          }
+      });
       updateData(mergedLinks, mergedCategories);
       setIsImportModalOpen(false);
-      alert(`成功导入 ${newLinks.length} 个新书签!`);
+      alert(`成功导入 ${newLinks.length} 个书签（已合并现有数据，重复链接已覆盖）!`);
   };
 
   const handleAddLink = (data: Omit<LinkItem, 'id' | 'createdAt'>) => {
@@ -676,6 +691,7 @@ function App() {
         onClose={() => setIsImportModalOpen(false)}
         existingLinks={links}
         categories={categories}
+        aiConfig={aiConfig}
         onImport={handleImportConfirm}
       />
 

@@ -45,6 +45,10 @@ export const generateBookmarkHtml = (links: LinkItem[], categories: Category[]):
       const date = Math.floor(link.createdAt / 1000);
       const iconAttr = link.icon ? ` ICON="${link.icon}"` : '';
       html += `        <DT><A HREF="${link.url}" ADD_DATE="${date}"${iconAttr}>${escapeHtml(link.title)}</A>\n`;
+      // 备注写入 <DD> 节点，保证重新导入时描述不丢失（Chrome/Edge/Firefox 书签格式标准）
+      if (link.description && link.description.trim()) {
+        html += `        <DD>${escapeHtml(link.description.trim())}</DD>\n`;
+      }
     });
 
     html += `    </DL><p>\n`;
@@ -60,6 +64,9 @@ export const generateBookmarkHtml = (links: LinkItem[], categories: Category[]):
     uncategorized.forEach(link => {
         const date = Math.floor(link.createdAt / 1000);
         html += `        <DT><A HREF="${link.url}" ADD_DATE="${date}">${escapeHtml(link.title)}</A>\n`;
+        if (link.description && link.description.trim()) {
+            html += `        <DD>${escapeHtml(link.description.trim())}</DD>\n`;
+        }
     });
     html += `    </DL><p>\n`;
   }

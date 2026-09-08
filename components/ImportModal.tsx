@@ -1,14 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, FileText, ArrowRight, Check, AlertCircle, FolderInput, ListTree } from 'lucide-react';
-import { Category, LinkItem } from '../types';
+import { X, Upload, FileText, ArrowRight, Check, AlertCircle, FolderInput, ListTree, Sparkles } from 'lucide-react';
+import { Category, LinkItem, AIConfig } from '../types';
 import { parseBookmarks } from '../services/bookmarkParser';
+import { suggestCategory } from '../services/geminiService';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   existingLinks: LinkItem[];
   categories: Category[];
-  onImport: (newLinks: LinkItem[], newCategories: Category[], mode?: 'original' | 'merge') => void;
+  aiConfig: AIConfig;
+  onImport: (newLinks: LinkItem[], newCategories: Category[], mode?: 'original' | 'merge' | 'ai') => void;
 }
 
 const ImportModal: React.FC<ImportModalProps> = ({ 
@@ -16,11 +18,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
   onClose, 
   existingLinks, 
   categories, 
+  aiConfig,
   onImport 
 }) => {
   const [step, setStep] = useState<'upload' | 'preview'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [importing, setImporting] = useState(false);
   
   // Analysis Results
   const [newLinksCount, setNewLinksCount] = useState(0);
@@ -32,8 +36,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
   const [parsedCategories, setParsedCategories] = useState<Category[]>([]);
   
   // Options
-  const [importMode, setImportMode] = useState<'original' | 'merge'>('original');
+  const [importMode, setImportMode] = useState<'original' | 'merge' | 'ai'>('original');
   const [targetCategoryId, setTargetCategoryId] = useState<string>(categories[0]?.id || 'common');
+  const [aiCategorizing, setAiCategorizing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,57 +101,77 @@ const ImportModal: React.FC<ImportModalProps> = ({
     }
   };
 
-  const executeImport = () => {
-      let finalLinks = [...parsedLinks];
-      let finalCategories: Category[] = [];
+  const executeImport = async () => {
+      setImporting(true);
+      try {
+        let finalLinks = [...parsedLinks];
+        let finalCategories: Category[] = [];
 
-      if (importMode === 'merge') {
-          // 合并模式：跳过已存在的链接，新增的归入指定分类
-          const existingUrls = new Set(existingLinks.map(l => l.url.trim().replace(/\/$/, '')));
-          finalLinks = finalLinks.filter(link => !existingUrls.has(link.url.trim().replace(/\/$/, '')));
-          finalLinks = finalLinks.map(link => ({
-              ...link,
-              categoryId: targetCategoryId
-          }));
-          // In merge mode, we do NOT add new categories from the file
-          finalCategories = []; 
-      } else {
-          // 保持目录结构模式：以导入文件为准全量覆盖（即使链接已存在，也以新数据为准）
-          
-          const nameToIdMap = new Map<string, string>();
-          categories.forEach(c => nameToIdMap.set(c.name, c.id));
+        if (importMode === 'merge') {
+            // 合并模式：跳过已存在的链接，新增的归入指定分类
+            const existingUrls = new Set(existingLinks.map(l => l.url.trim().replace(/\/$/, '')));
+            finalLinks = finalLinks.filter(link => !existingUrls.has(link.url.trim().replace(/\/$/, '')));
+            finalLinks = finalLinks.map(link => ({
+                ...link,
+                categoryId: targetCategoryId
+            }));
+            // In merge mode, we do NOT add new categories from the file
+            finalCategories = []; 
+        } else if (importMode === 'ai') {
+            // AI 智能分类：把每条链接归入现有分类（不新建分类、不依赖收藏夹目录结构）
+            setAiCategorizing(true);
+            finalCategories = [];
+            const categorized: LinkItem[] = [];
+            for (const link of finalLinks) {
+                const catId = await suggestCategory(link.title, link.url, categories.map(c => ({ id: c.id, name: c.name })), aiConfig);
+                categorized.push({
+                    ...link,
+                    categoryId: (catId && categories.some(c => c.id === catId)) ? catId : 'common',
+                });
+            }
+            finalLinks = categorized;
+            setAiCategorizing(false);
+        } else {
+            // 保持目录结构模式：分类按名称映射到现有分类（匹配则不新建），
+            // 收藏夹里现有导航站没有的文件夹才新建分类；链接本身在 App 侧统一合并（不清空现有）
+            
+            const nameToIdMap = new Map<string, string>();
+            categories.forEach(c => nameToIdMap.set(c.name, c.id));
 
-          // Valid new categories to add
-          const categoriesToAdd: Category[] = [];
+            // Valid new categories to add
+            const categoriesToAdd: Category[] = [];
 
-          parsedCategories.forEach(pc => {
-              if (nameToIdMap.has(pc.name)) {
-                  // Category exists, we don't add it.
-                  // But we need to know its ID to remap links.
-              } else {
-                  categoriesToAdd.push(pc);
-                  nameToIdMap.set(pc.name, pc.id); // Add new one to map
-              }
-          });
+            parsedCategories.forEach(pc => {
+                if (nameToIdMap.has(pc.name)) {
+                    // Category exists, we don't add it.
+                    // But we need to know its ID to remap links.
+                } else {
+                    categoriesToAdd.push(pc);
+                    nameToIdMap.set(pc.name, pc.id); // Add new one to map
+                }
+            });
 
-          // Remap links
-          finalLinks = finalLinks.map(link => {
-             // Find the name of the category this link was assigned to in the parser
-             const originalCat = parsedCategories.find(c => c.id === link.categoryId) 
-                                 || categories.find(c => c.id === link.categoryId); // Fallback
-             
-             if (originalCat && nameToIdMap.has(originalCat.name)) {
-                 return { ...link, categoryId: nameToIdMap.get(originalCat.name)! };
-             }
-             // If for some reason we can't find the map, put it in common
-             return { ...link, categoryId: 'common' };
-          });
+            // Remap links
+            finalLinks = finalLinks.map(link => {
+               // Find the name of the category this link was assigned to in the parser
+               const originalCat = parsedCategories.find(c => c.id === link.categoryId) 
+                                   || categories.find(c => c.id === link.categoryId); // Fallback
+               
+               if (originalCat && nameToIdMap.has(originalCat.name)) {
+                   return { ...link, categoryId: nameToIdMap.get(originalCat.name)! };
+               }
+               // If for some reason we can't find the map, put it in common
+               return { ...link, categoryId: 'common' };
+            });
 
-          finalCategories = categoriesToAdd;
+            finalCategories = categoriesToAdd;
+        }
+
+        onImport(finalLinks, finalCategories, importMode);
+        handleClose();
+      } finally {
+        setImporting(false);
       }
-
-      onImport(finalLinks, finalCategories, importMode);
-      handleClose();
   };
 
   return (
@@ -233,9 +258,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
                                 <input type="radio" name="mode" className="mt-1" checked={importMode === 'original'} onChange={() => setImportMode('original')} />
                                 <div>
                                     <div className="flex items-center gap-2 font-medium text-sm dark:text-white">
-                                        <ListTree size={16} /> 保持原目录结构
+                                        <ListTree size={16} /> 按收藏夹目录归类
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-1">如果分类不存在，将自动创建。</p>
+                                    <p className="text-xs text-slate-500 mt-1">目录名与现有分类相同的归入现有分类，没有的自动新建；现有数据不会清空。</p>
                                 </div>
                             </label>
 
@@ -260,6 +285,26 @@ const ImportModal: React.FC<ImportModalProps> = ({
                                     </div>
                                 </div>
                             </label>
+
+                            <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${importMode === 'ai' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700'} ${!aiConfig?.apiKey ? 'opacity-60 pointer-events-none' : ''}`}>
+                                <input type="radio" name="mode" className="mt-1" checked={importMode === 'ai'} onChange={() => setImportMode('ai')} />
+                                <div>
+                                    <div className="flex items-center gap-2 font-medium text-sm dark:text-white">
+                                        <Sparkles size={16} /> AI 智能分类
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {aiConfig?.apiKey
+                                            ? 'AI 根据网站内容把每条书签归入现有分类，不新建分类；需要先在设置里配置 AI。'
+                                            : '需要先在设置里配置 AI（模型/API Key）后才能使用。'}
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+                    )}
+                    {importing && (
+                        <div className="text-sm text-center p-2 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 flex items-center justify-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                            <span>{aiCategorizing ? 'AI 正在分类中，请稍候...' : '正在导入...'}</span>
                         </div>
                     )}
                 </div>
