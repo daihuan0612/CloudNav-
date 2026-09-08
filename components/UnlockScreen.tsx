@@ -85,7 +85,7 @@ export default function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
           </div>
 
           <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center mt-6">
-            解锁后本浏览器将记住状态，刷新无需重新输入
+            解锁后本浏览器 7 天内免密进入，过期需重新输入
           </p>
         </div>
       </div>
