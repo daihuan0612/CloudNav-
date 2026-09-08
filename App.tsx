@@ -524,7 +524,7 @@ function App() {
          <img 
             src={link.icon} 
             alt="" 
-            className="w-5 h-5 object-contain" 
+            className="w-7 h-7 object-contain" 
             onError={(e) => {
                 e.currentTarget.style.display = 'none';
                 e.currentTarget.parentElement!.innerText = link.title.charAt(0);
@@ -551,19 +551,19 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-2.5' : 'p-3.5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift hover:border-blue-300/60 dark:hover:border-blue-500/30 fade-up`}
+            className={`group relative flex flex-col ${isSimple ? 'p-3' : 'p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift hover:border-blue-300/60 dark:hover:border-blue-500/30 fade-up`}
             title={link.description || link.url}
         >
-            <div className={`flex items-center gap-3 ${isSimple ? '' : 'mb-1.5'} pr-6`}>
-                <div className={`${isSimple ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
+            <div className={`flex items-center gap-3 ${isSimple ? '' : 'mb-2'} pr-6`}>
+                <div className={`${isSimple ? 'w-8 h-8 text-sm' : 'w-12 h-12 text-xl'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
                     {iconDisplay}
                 </div>
-                <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                <h3 className="font-medium text-base text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                     {link.title}
                 </h3>
             </div>
             {!isSimple && (
-                <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 h-4 w-full overflow-hidden">
+                <div className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1 h-5 w-full overflow-hidden">
                     {link.description || <span className="opacity-0">.</span>}
                 </div>
             )}
@@ -961,7 +961,7 @@ function App() {
                             置顶 / 常用
                         </h2>
                     </div>
-                    <div className={`grid gap-3 ${siteSettings.cardStyle === 'simple' ? 'grid-cols-2 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'}`}>
+                    <div className={`grid ${siteSettings.cardStyle === 'simple' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4' : 'grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5'}`}>
                         {pinnedLinks.map(link => renderLinkCard(link))}
                     </div>
                 </section>
@@ -1013,7 +1013,7 @@ function App() {
                                         暂无链接
                                     </div>
                                 ) : (
-                                    <div className={`grid gap-3 ${siteSettings.cardStyle === 'simple' ? 'grid-cols-2 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'}`}>
+                                    <div className={`grid ${siteSettings.cardStyle === 'simple' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4' : 'grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5'}`}>
                                         {catLinks.map(link => renderLinkCard(link))}
                                     </div>
                                 )}
