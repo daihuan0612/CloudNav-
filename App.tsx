@@ -361,14 +361,16 @@ function App() {
       }
   };
 
-  const handleImportConfirm = (newLinks: LinkItem[], newCategories: Category[]) => {
+  const handleImportConfirm = (newLinks: LinkItem[], newCategories: Category[], mode?: 'original' | 'merge') => {
       const mergedCategories = [...categories];
       newCategories.forEach(nc => {
           if (!mergedCategories.some(c => c.id === nc.id || c.name === nc.name)) {
               mergedCategories.push(nc);
           }
       });
-      const mergedLinks = [...links, ...newLinks];
+      // original（保持原目录结构）：以导入文件为准替换全部链接，避免重复累积
+      // merge（合并）：追加新链接到现有数据
+      const mergedLinks = mode === 'original' ? newLinks : [...links, ...newLinks];
       updateData(mergedLinks, mergedCategories);
       setIsImportModalOpen(false);
       alert(`成功导入 ${newLinks.length} 个新书签!`);
