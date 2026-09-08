@@ -18,10 +18,20 @@ export const onRequestOptions = async () => {
   });
 };
 
-// GET: 获取数据
-export const onRequestGet = async (context: { env: Env }) => {
+// GET: 获取数据（需要访问密码，纯私有模式）
+export const onRequestGet = async (context: { request: Request; env: Env }) => {
+  const { request, env } = context;
+
+  const providedPassword = request.headers.get('x-auth-password');
+  const serverPassword = env.PASSWORD;
+  if (!serverPassword || providedPassword !== serverPassword) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+
   try {
-    const { env } = context;
     // 从 KV 中读取数据
     const data = await env.CLOUDNAV_KV.get('app_data');
     
