@@ -8,7 +8,7 @@ interface ImportModalProps {
   onClose: () => void;
   existingLinks: LinkItem[];
   categories: Category[];
-  onImport: (newLinks: LinkItem[], newCategories: Category[]) => void;
+  onImport: (newLinks: LinkItem[], newCategories: Category[], mode?: 'original' | 'merge') => void;
 }
 
 const ImportModal: React.FC<ImportModalProps> = ({ 
@@ -65,18 +65,15 @@ const ImportModal: React.FC<ImportModalProps> = ({
         // 1. Parse
         const result = await parseBookmarks(selectedFile);
         
-        // 2. Diff Logic
+        // 2. Diff Logic：不再丢弃重复链接——统计"已存在"数量仅用于提示，
+        //    导入时以新文件为准覆盖
         const existingUrls = new Set(existingLinks.map(l => l.url.trim().replace(/\/$/, ''))); // Normalize URLs slightly
         
-        const uniqueNewLinks: LinkItem[] = [];
         let duplicates = 0;
-
         result.links.forEach(link => {
             const normalizedUrl = link.url.trim().replace(/\/$/, '');
             if (existingUrls.has(normalizedUrl)) {
                 duplicates++;
-            } else {
-                uniqueNewLinks.push(link);
             }
         });
 
@@ -84,9 +81,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
         const existingCategoryNames = new Set(categories.map(c => c.name));
         const uniqueNewCategories = result.categories.filter(c => !existingCategoryNames.has(c.name));
 
-        setParsedLinks(uniqueNewLinks);
-        setParsedCategories(uniqueNewCategories);
-        setNewLinksCount(uniqueNewLinks.length);
+        setParsedLinks(result.links);
+        setParsedCategories(result.categories);
+        setNewLinksCount(result.links.length);
         setDuplicateCount(duplicates);
         setNewCategoriesCount(uniqueNewCategories.length);
         
@@ -104,7 +101,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
       let finalCategories: Category[] = [];
 
       if (importMode === 'merge') {
-          // Flatten all new links to the target category
+          // 合并模式：跳过已存在的链接，新增的归入指定分类
+          const existingUrls = new Set(existingLinks.map(l => l.url.trim().replace(/\/$/, '')));
+          finalLinks = finalLinks.filter(link => !existingUrls.has(link.url.trim().replace(/\/$/, '')));
           finalLinks = finalLinks.map(link => ({
               ...link,
               categoryId: targetCategoryId
@@ -112,10 +111,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
           // In merge mode, we do NOT add new categories from the file
           finalCategories = []; 
       } else {
-          // Keep structure mode
-          // We need to merge categories carefully.
-          // Since parseBookmarks generates IDs for categories, if a category name already exists in `categories`, 
-          // we should remap the links to the existing category ID instead of creating a new duplicate-named category.
+          // 保持目录结构模式：以导入文件为准全量覆盖（即使链接已存在，也以新数据为准）
           
           const nameToIdMap = new Map<string, string>();
           categories.forEach(c => nameToIdMap.set(c.name, c.id));
@@ -149,7 +145,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
           finalCategories = categoriesToAdd;
       }
 
-      onImport(finalLinks, finalCategories);
+      onImport(finalLinks, finalCategories, importMode);
       handleClose();
   };
 
@@ -206,11 +202,11 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     <div className="grid grid-cols-3 gap-2">
                         <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-center border border-green-100 dark:border-green-900/30">
                             <div className="text-xl font-bold text-green-600 dark:text-green-400">{newLinksCount}</div>
-                            <div className="text-xs text-green-700 dark:text-green-500">新增链接</div>
+                            <div className="text-xs text-green-700 dark:text-green-500">将导入</div>
                         </div>
                         <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg text-center border border-slate-200 dark:border-slate-600">
                             <div className="text-xl font-bold text-slate-600 dark:text-slate-400">{duplicateCount}</div>
-                            <div className="text-xs text-slate-500">重复跳过</div>
+                            <div className="text-xs text-slate-500">{importMode === 'original' ? '已存在·将覆盖' : '重复跳过'}</div>
                         </div>
                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-center border border-purple-100 dark:border-purple-900/30">
                             <div className="text-xl font-bold text-purple-600 dark:text-purple-400">{importMode === 'original' ? newCategoriesCount : 0}</div>
@@ -221,10 +217,16 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     {newLinksCount === 0 ? (
                         <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-lg text-sm">
                             <AlertCircle size={16} />
-                            <span>未发现新链接，所有链接已存在。</span>
+                            <span>文件中没有可导入的链接。</span>
                         </div>
                     ) : (
                         <div className="space-y-3">
+                            {duplicateCount > 0 && (
+                                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-lg text-sm">
+                                    <AlertCircle size={16} />
+                                    <span>{duplicateCount} 条链接已存在，导入后将<strong>以新文件为准覆盖</strong>。</span>
+                                </div>
+                            )}
                             <label className="text-sm font-medium dark:text-slate-300">导入方式</label>
                             
                             <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${importMode === 'original' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
