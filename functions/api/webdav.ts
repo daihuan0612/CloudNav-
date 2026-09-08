@@ -1,7 +1,18 @@
 
-export const onRequestPost = async (context: { request: Request }) => {
-  const { request } = context;
-  
+// WebDAV 备份代理（需访问密码鉴权，与其他端点一致）
+export const onRequestPost = async (context: { request: Request; env: { PASSWORD: string } }) => {
+  const { request, env } = context;
+
+  // 鉴权：无密码拒绝（防未授权使用代理与探测）
+  const providedPassword = request.headers.get('x-auth-password');
+  const serverPassword = env.PASSWORD;
+  if (!serverPassword || providedPassword !== serverPassword) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const body = await request.json() as any;
     const { operation, config, payload } = body;
