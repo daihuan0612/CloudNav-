@@ -60,8 +60,8 @@ function App() {
   
   // Site Settings - Initialized with defaults to prevent crash
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({
-      title: 'CloudNav - 我的导航',
-      navTitle: '云航 CloudNav',
+      title: '小苹果导航',
+      navTitle: '小苹果导航',
       favicon: '',
       cardStyle: 'detailed'
   });
