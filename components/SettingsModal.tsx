@@ -305,6 +305,22 @@ async function refreshCache() {
     if (data && data.cloudnav_data) {
         linkCache = data.cloudnav_data.links || [];
         categoryCache = data.cloudnav_data.categories || [];
+        return;
+    }
+    // 本地无缓存:直接从网站拉取,保证右键菜单一开始就有分类
+    try {
+        const res = await fetch(\`\${CONFIG.apiBase}/api/storage\`, {
+            headers: { 'x-auth-password': CONFIG.password }
+        });
+        if (res.ok) {
+            const remote = await res.json();
+            linkCache = remote.links || [];
+            categoryCache = remote.categories || [];
+            // 写回本地,供侧边栏直接使用
+            await chrome.storage.local.set({ cloudnav_data: remote });
+        }
+    } catch (e) {
+        console.error('刷新缓存失败', e);
     }
     return;
 }
@@ -1174,7 +1190,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     <li><strong>[重要]</strong> 将下方图标保存为 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">icon.png</code>。</li>
                                     <li>获取插件代码文件：
                                         <ul className="list-disc list-inside ml-4 mt-1 space-y-1 text-slate-500">
-                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载所有文件"</span> 按钮，解压到该文件夹。</li>
+                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载{localSiteSettings.navTitle || "小苹果导航"}Pro"</span> 按钮，解压到该文件夹。</li>
                                             <li><strong>方式二 (备用)：</strong>分别点击下方代码块的 <Download size={12} className="inline"/> 按钮下载或复制 <code className="bg-white dark:bg-slate-900 px-1 rounded">manifest.json</code>, <code className="bg-white dark:bg-slate-900 px-1 rounded">background.js</code> 等文件到该文件夹。</li>
                                         </ul>
                                     </li>
@@ -1200,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-blue-500/20"
                                     >
                                         <Package size={20} />
-                                        {isZipping ? '打包中...' : '📦 一键下载所有文件 (v7.6 Pro)'}
+                                        {isZipping ? '打包中...' : `📦 一键下载${localSiteSettings.navTitle || "小苹果导航"}Pro`}
                                     </button>
                                 </div>
                                 
