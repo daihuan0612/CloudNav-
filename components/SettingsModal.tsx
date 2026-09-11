@@ -1190,7 +1190,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     <li><strong>[重要]</strong> 将下方图标保存为 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">icon.png</code>。</li>
                                     <li>获取插件代码文件：
                                         <ul className="list-disc list-inside ml-4 mt-1 space-y-1 text-slate-500">
-                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载{localSiteSettings.navTitle || "小苹果导航"}Pro"</span> 按钮，解压到该文件夹。</li>
+                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载{localSiteSettings.navTitle || "小苹果导航"}Pro-浏览器插件"</span> 按钮，解压到该文件夹。</li>
                                             <li><strong>方式二 (备用)：</strong>分别点击下方代码块的 <Download size={12} className="inline"/> 按钮下载或复制 <code className="bg-white dark:bg-slate-900 px-1 rounded">manifest.json</code>, <code className="bg-white dark:bg-slate-900 px-1 rounded">background.js</code> 等文件到该文件夹。</li>
                                         </ul>
                                     </li>
@@ -1216,12 +1216,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-blue-500/20"
                                     >
                                         <Package size={20} />
-                                        {isZipping ? '打包中...' : `📦 一键下载${localSiteSettings.navTitle || "小苹果导航"}Pro`}
+                                        {isZipping ? '打包中...' : `📦 一键下载${localSiteSettings.navTitle || "小苹果导航"}Pro-浏览器插件`}
                                     </button>
                                 </div>
                                 
                                 <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 rounded border border-green-200 dark:border-green-900/50 text-sm space-y-2">
-                                    <div className="font-bold flex items-center gap-2"><Zap size={16}/> 完美交互方案 (v7.6):</div>
+                                    <div className="font-bold flex items-center gap-2"><Zap size={16}/> 完美交互方案:</div>
                                     <ul className="list-disc list-inside text-xs space-y-1">
                                         <li><strong>左键 / 快捷键:</strong> 极速打开/关闭侧边栏 (无弹窗延迟)。</li>
                                         <li><strong>网页右键:</strong> 直接展示分类列表 (支持判重警告)。</li>
