@@ -259,7 +259,7 @@ function App() {
   }, [authToken]);
 
   useEffect(() => {
-      document.title = siteSettings.title || 'CloudNav';
+      document.title = siteSettings.title || '小苹果导航';
       const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
       if (link && siteSettings.favicon) {
           link.href = siteSettings.favicon;
@@ -746,7 +746,7 @@ function App() {
                  )}
              </div>
             <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent truncate">
-              {siteSettings.navTitle || 'CloudNav'}
+              {siteSettings.navTitle || '小苹果导航'}
             </span>
         </div>
 
