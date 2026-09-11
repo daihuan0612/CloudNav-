@@ -39,6 +39,8 @@ function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all'); 
   const [searchQuery, setSearchQuery] = useState('');
+  const [dragLinkId, setDragLinkId] = useState<string | null>(null);
+  const [dragOverLinkId, setDragOverLinkId] = useState<string | null>(null);
   
   // New Search State
   const [searchMode, setSearchMode] = useState<'local' | 'external'>('local');
@@ -511,6 +513,51 @@ function App() {
       return !unlockedCategoryIds.has(catId);
   };
 
+  // --- 同分类内拖拽排序 ---
+  // 仅在同一分类内部重排;拖到其他分类不生效(可通过编辑链接改分类)
+  const handleDragStart = (e: React.DragEvent, linkId: string) => {
+      setDragLinkId(linkId);
+      e.dataTransfer.effectAllowed = 'move';
+      // 兼容 Firefox:拖拽必须设置数据
+      try { e.dataTransfer.setData('text/plain', linkId); } catch (err) {}
+  };
+
+  const handleDragOver = (e: React.DragEvent, linkId: string) => {
+      e.preventDefault();      // 允许放置
+      e.dataTransfer.dropEffect = 'move';
+      // 记录当前悬停的卡片,用于视觉反馈
+      if (dragOverLinkId !== linkId) setDragOverLinkId(linkId);
+  };
+
+  // 放到目标卡片上:把被拖的卡片移到目标卡片的位置(同分类内)
+  const handleDrop = (e: React.DragEvent, targetLinkId: string) => {
+      e.preventDefault();
+      const sourceId = dragLinkId || e.dataTransfer.getData('text/plain');
+      setDragLinkId(null);
+      setDragOverLinkId(null);
+      // 无来源或拖回原位:直接忽略
+      if (!sourceId || sourceId === targetLinkId) return;
+      // 未登录不能保存排序
+      if (!authToken) { setIsAuthOpen(true); return; }
+      
+      const source = links.find(l => l.id === sourceId);
+      const target = links.find(l => l.id === targetLinkId);
+      // 必须同分类才能排序
+      if (!source || !target || source.categoryId !== target.categoryId) return;
+
+      const reordered = [...links];
+      const fromIdx = reordered.findIndex(l => l.id === sourceId);
+      const toIdx = reordered.findIndex(l => l.id === targetLinkId);
+      reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, source);
+      updateData(reordered, categories);
+  };
+
+  const handleDragEnd = () => {
+      setDragLinkId(null);
+      setDragOverLinkId(null);
+  };
+
   const pinnedLinks = useMemo(() => {
       return links.filter(l => l.pinned && !isCategoryLocked(l.categoryId));
   }, [links, categories, unlockedCategoryIds]);
@@ -555,6 +602,11 @@ function App() {
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
+            draggable={true}
+            onDragStart={(e) => handleDragStart(e, link.id)}
+            onDragOver={(e) => handleDragOver(e, link.id)}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleDrop(e, link.id); }}
+            onDragEnd={handleDragEnd}
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -566,7 +618,7 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-3' : 'p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up`}
+            className={`group relative flex flex-col ${isSimple ? 'p-3' : 'p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up ${dragLinkId === link.id ? 'opacity-50' : ''} ${dragOverLinkId === link.id && dragLinkId && dragLinkId !== link.id ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
             title={link.description || link.url}
         >
             {/* hover 渐变盖层（对齐老站 site-card::before） */}
