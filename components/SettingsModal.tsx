@@ -59,7 +59,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localConfig, setLocalConfig] = useState<AIConfig>(config);
   
   const [localSiteSettings, setLocalSiteSettings] = useState<SiteSettings>(() => ({
-      title: siteSettings?.title || 'CloudNav - 我的导航',
+      title: siteSettings?.title || '小苹果导航',
       navTitle: siteSettings?.navTitle || 'CloudNav',
       favicon: siteSettings?.favicon || '',
       cardStyle: siteSettings?.cardStyle || 'detailed'
@@ -103,7 +103,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) {
       setLocalConfig(config);
       const safeSettings = {
-          title: siteSettings?.title || 'CloudNav - 我的导航',
+          title: siteSettings?.title || '小苹果导航',
           navTitle: siteSettings?.navTitle || 'CloudNav',
           favicon: siteSettings?.favicon || '',
           cardStyle: siteSettings?.cardStyle || 'detailed'
@@ -353,7 +353,7 @@ function buildMenus() {
         // 创建一个统一的根菜单，同时支持 "page" (网页右键), "link" (链接右键), "action" (图标右键)
         chrome.contextMenus.create({
             id: "cloudnav_root",
-            title: "⚡ 保存到 CloudNav",
+            title: "⚡ 保存到 小苹果导航",
             contexts: ["page", "link", "action"]
         });
 
