@@ -49,8 +49,8 @@
       ::-webkit-scrollbar-thumb { background: rgba(100,116,139,.28); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
       ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.5); background-clip: content-box; }
       /* 卡片 hover 光晕与上浮 */
-      .card-lift { transition: transform .22s cubic-bezier(.4,0,.2,1), box-shadow .22s ease, border-color .22s ease; }
-      .card-lift:hover { animation: none; transform: translateY(-3px); border-color: #3b82f6; box-shadow: 0 14px 28px rgba(15,23,42,.08), 0 6px 12px rgba(15,23,42,.04); }
+      .card-lift { transition: box-shadow .22s ease, border-color .22s ease; }
+      .card-lift:hover { border-color: #3b82f6; box-shadow: 0 14px 28px rgba(15,23,42,.08), 0 6px 12px rgba(15,23,42,.04); }
       /* 入场动画 */
       @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
       .fade-up { animation: fadeUp .45s cubic-bezier(.4,0,.2,1) both; }
