@@ -1,13 +1,20 @@
 
 import { Category, LinkItem, WebDavConfig } from "../types";
 
+// 站点访问密码（解锁后存在 localStorage），/api/webdav 和别的接口一样要求这个鉴权头
+const AUTH_TOKEN_KEY = 'cloudnav_auth_token';
+const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || '';
+
 // Helper to call our Cloudflare Proxy
 // This solves the CORS issue by delegating the request to the backend
 const callWebDavProxy = async (operation: 'check' | 'upload' | 'download', config: WebDavConfig, payload?: any) => {
     try {
         const response = await fetch('/api/webdav', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-auth-password': getAuthToken(),
+            },
             body: JSON.stringify({
                 operation,
                 config,
