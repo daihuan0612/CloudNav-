@@ -24,6 +24,21 @@ export interface SiteSettings {
   cardStyle: 'detailed' | 'simple';
 }
 
+/** 站点默认名称 —— 唯一出处，全站所有兜底值都引用它，不再散落硬编码。
+ *  这是中性占位名：部署者在「设置 → 网站设置」里改成自己的名字后，全站（含浏览器标签页、
+ *  侧边栏、生成的浏览器插件）都会跟着变。 */
+export const DEFAULT_SITE_TITLE = '我的导航';
+
+/** 站点展示设置的本地缓存键：index.html 用它提前应用标题，避免解锁前显示默认名 */
+export const SITE_SETTINGS_KEY = 'cloudnav_site_settings';
+
+export const DEFAULT_SITE_SETTINGS: SiteSettings = {
+  title: DEFAULT_SITE_TITLE,
+  navTitle: DEFAULT_SITE_TITLE,
+  favicon: '',
+  cardStyle: 'detailed',
+};
+
 export interface AppState {
   links: LinkItem[];
   categories: Category[];
@@ -56,13 +71,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'ai', name: '人工智能', icon: 'Bot' },
 ];
 
-export const INITIAL_LINKS: LinkItem[] = [
-  { id: '1', title: 'GitHub', url: 'https://github.com', categoryId: 'dev', createdAt: Date.now(), description: '代码托管平台', pinned: true },
-  { id: '2', title: 'React', url: 'https://react.dev', categoryId: 'dev', createdAt: Date.now(), description: '构建Web用户界面的库' },
-  { id: '3', title: 'Tailwind CSS', url: 'https://tailwindcss.com', categoryId: 'design', createdAt: Date.now(), description: '原子化CSS框架' },
-  { id: '4', title: 'ChatGPT', url: 'https://chat.openai.com', categoryId: 'ai', createdAt: Date.now(), description: 'OpenAI聊天机器人', pinned: true },
-  { id: '5', title: 'Gemini', url: 'https://gemini.google.com', categoryId: 'ai', createdAt: Date.now(), description: 'Google DeepMind AI' },
-];
+// 首次部署时为空：不预置任何示例书签，由部署者自行导入或添加。
+export const INITIAL_LINKS: LinkItem[] = [];
 
 export interface SearchEngine {
   id: string;

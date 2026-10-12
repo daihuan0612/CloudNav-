@@ -2,9 +2,29 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta name="author" content="空行" />
+    <meta name="copyright" content="Copyright (c) 空行 — https://github.com/daihuan0612/CloudNav-" />
+    <link rel="author" href="https://github.com/daihuan0612/CloudNav-" />
     <link rel="icon" type="image/svg+xml" href="https://lucide.dev/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>小苹果导航</title>
+    <title>我的导航</title>
+    <script>
+      // 尽早应用站点自定义名称/图标：读取本地缓存，让「解锁界面」和「加载瞬间」也显示自定义名
+      // 说明：没解锁过的全新浏览器没有缓存，此时显示上方默认名（有意为之，避免把站名对外公开）
+      (function () {
+        try {
+          var raw = localStorage.getItem('cloudnav_site_settings');
+          if (!raw) return;
+          var s = JSON.parse(raw) || {};
+          if (s.title) document.title = s.title;
+          if (s.navTitle && !s.title) document.title = s.navTitle;
+          if (s.favicon) {
+            var el = document.querySelector("link[rel~='icon']");
+            if (el) el.href = s.favicon;
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -57,21 +77,6 @@
       /* 分类标题渐变竖条 */
       .cat-bar { width: 4px; height: 20px; border-radius: 4px; background: linear-gradient(180deg, #3b82f6, #8b5cf6); box-shadow: 0 0 12px rgba(99,102,241,.35); }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
-    "jszip": "https://aistudiocdn.com/jszip@^3.10.1"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 transition-colors duration-300">
     <div id="root"></div>

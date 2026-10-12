@@ -26,3 +26,10 @@ dist-ssr
 # Reasonix tool runtime
 .reasonix/
 reasonix.toml
+
+# Wrangler 本地构建/部署临时目录
+.wrangler/
+
+# 拖拽部署包（由 dist 打包而来，属于可再生成的构建产物，不入库）
+# 文件仍在项目根目录，只是不进 git；需要时用 npm run build 重新打包即可
+CloudNav-拖拽部署包.zip

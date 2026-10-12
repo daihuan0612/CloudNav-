@@ -69,21 +69,37 @@
 
 本应用完全基于 **Cloudflare Pages** + **KV** 构建，无需服务器，永久免费。
 
-> **📥 [点击下载完整图文教程 (.docx)](图文教程.docx)**
+> **📖 完整部署说明请看 [部署说明.md](部署说明.md)（推荐，含拖拽部署全流程）**
 
-### 📋 简明部署步骤
+### 方式一：拖拽部署（推荐，不用命令行）
 
-1.  **Fork 项目**: 点击右上角 Fork 按钮，将本项目克隆到您的 GitHub 账号。
-2.  **创建 Pages 应用**: Cloudflare Dashboard -> Workers & Pages -> 创建应用程序 -> Pages -> 连接到 Git -> 选择您的 `CloudNav-` 仓库。
+1.  **构建**: 项目根目录跑 `npm run build`，得到 `dist` 文件夹。
+2.  **创建 Pages 应用**: Cloudflare Dashboard → Workers & Pages → 创建应用程序 → **Pages** → **拖放你的文件** → 输入项目名 → 把 `dist` 拖进去 → 部署。
+3.  **创建 KV**: Workers & Pages → KV → 新建命名空间（例如命名 `CLOUDNAV_DB`）。
+4.  **绑定变量**（⚠️ 变量名必须逐字一致）:
+    *   项目设置 → 绑定 (Bindings) → 添加 KV 命名空间 → 变量名填 **`CLOUDNAV_KV`**，值选刚建的命名空间。
+    *   变量和密钥 → 添加变量 **`PASSWORD`**，值为你的访问密码（建议选「加密」）。
+5.  **重新部署**: 点「创建新部署」→ 再拖一次同一份 `dist`。
+
+> **为什么能拖拽？** 项目内置了 `public/_worker.js`（Pages 高级模式入口）。
+> Cloudflare 官方限制：拖拽部署**不支持** `functions/` 目录，但**支持** `_worker.js`。
+
+### 方式二：Git 集成部署
+
+1.  **Fork 项目**: 点击右上角 Fork 按钮，将本项目克隆到你的 GitHub 账号。
+2.  **创建 Pages 应用**: Workers & Pages → 创建应用程序 → Pages → 连接到 Git → 选择你的仓库。
 3.  **配置构建**:
     *   框架预设: **无 (None)**
     *   构建命令: `npm run build`
     *   输出目录: `dist`
-4.  **创建数据库**: Workers & Pages -> KV -> 新建命名空间，命名 `CLOUDNAV_DB`。
+4.  **创建 KV**: Workers & Pages → KV → 新建命名空间，命名 `CLOUDNAV_DB`。
 5.  **绑定变量**:
-    *   项目设置 -> 绑定 (Bindings) -> 添加 KV 命名空间 -> 变量名填 `CLOUDNAV_KV`，值选 `CLOUDNAV_DB`。
-    *   环境变量 (Environment variables) -> 添加变量 `PASSWORD`，值为您的访问密码。
-6.  **部署**: 重新部署项目即可（**绑定/改密码后必须重新部署才生效**）。
+    *   项目设置 → 绑定 (Bindings) → 添加 KV 命名空间 → 变量名填 `CLOUDNAV_KV`，值选 `CLOUDNAV_DB`。
+    *   环境变量 (Environment variables) → 添加变量 `PASSWORD`，值为你的访问密码。
+6.  **部署**: 重新部署项目即可。
+
+> ⚠️ **绑定/改密码后必须重新部署才生效**（Cloudflare Pages 机制）。
+> 💡 **只改密码不用重新构建** —— 密码是云端环境变量，不在 `dist` 里，重复上传同一份 `dist` 即可。
 
 ---
 
@@ -116,17 +132,27 @@
 ## 📦 目录结构
 
 ```
-├── components/          # 界面组件（含 UnlockScreen 解锁、DeadLinkCheckModal 检测）
-├── functions/api/       # Cloudflare Functions
-│   ├── storage.ts       # 数据读写（GET/POST 均鉴权）
-│   ├── link.ts          # 扩展保存链接（鉴权）
-│   ├── check.ts         # 死链检测海外探测（鉴权 + SSRF 防护）
-│   ├── verify.ts        # 解锁密码校验
-│   └── webdav.ts        # WebDAV 备份代理（已补鉴权）
+├── public/
+│   └── _worker.js       # ★ 后端接口入口（Pages 高级模式）
+│                        #   构建后出现在 dist/_worker.js，包含全部 5 个接口：
+│                        #   /api/storage 数据读写（GET/POST 均鉴权）
+│                        #   /api/link    插件保存链接（鉴权）
+│                        #   /api/check   死链检测海外探测（鉴权 + SSRF 防护）
+│                        #   /api/verify  解锁密码校验
+│                        #   /api/webdav  WebDAV 备份代理（鉴权）
+├── components/          # 界面组件
+│   ├── UnlockScreen.tsx     # 整站解锁界面
+│   ├── ErrorBoundary.tsx    # ★ 全局错误边界（崩溃时显示恢复页，不白屏）
+│   └── AuthorBadge.tsx      # ★ 署名徽标（带自愈防护）
 ├── services/            # AI 调用、书签解析、备份服务
+├── utils/
+│   ├── favicon.ts       # 图标降级链
+│   └── author.ts        # 署名与作者仓库地址（字符码存储，产物中无明文）
 ├── index.html           # 入口 + Tailwind 配置 + 全局样式
 ├── App.tsx              # 主应用
-└── types.ts             # 类型定义
+├── types.ts             # 类型定义
+├── LICENSE              # 许可与署名保留条款
+└── 部署说明.md           # ★ 完整部署步骤（拖拽部署 / 绑定 / 变量）
 ```
 
 ---

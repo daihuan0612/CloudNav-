@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
-import { AIConfig, LinkItem, Category, SiteSettings } from '../types';
+import { AIConfig, LinkItem, Category, SiteSettings, DEFAULT_SITE_TITLE } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
 import { handleIconError } from '../utils/favicon';
 import JSZip from 'jszip';
@@ -59,8 +59,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localConfig, setLocalConfig] = useState<AIConfig>(config);
   
   const [localSiteSettings, setLocalSiteSettings] = useState<SiteSettings>(() => ({
-      title: siteSettings?.title || '小苹果导航',
-      navTitle: siteSettings?.navTitle || '小苹果导航',
+      title: siteSettings?.title || DEFAULT_SITE_TITLE,
+      navTitle: siteSettings?.navTitle || DEFAULT_SITE_TITLE,
       favicon: siteSettings?.favicon || '',
       cardStyle: siteSettings?.cardStyle || 'detailed'
   }));
@@ -103,8 +103,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) {
       setLocalConfig(config);
       const safeSettings = {
-          title: siteSettings?.title || '小苹果导航',
-          navTitle: siteSettings?.navTitle || '小苹果导航',
+          title: siteSettings?.title || DEFAULT_SITE_TITLE,
+          navTitle: siteSettings?.navTitle || DEFAULT_SITE_TITLE,
           favicon: siteSettings?.favicon || '',
           cardStyle: siteSettings?.cardStyle || 'detailed'
       };
@@ -233,10 +233,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const getManifestJson = () => {
     const json: any = {
         manifest_version: 3,
-        name: (localSiteSettings.navTitle || "小苹果导航") + " Pro",
+        name: (localSiteSettings.navTitle || DEFAULT_SITE_TITLE) + " Pro",
         version: "7.6",
         minimum_chrome_version: "116",
-        description: (localSiteSettings.navTitle || "小苹果导航") + " - 极速侧边栏与智能收藏",
+        description: (localSiteSettings.navTitle || DEFAULT_SITE_TITLE) + " - 极速侧边栏与智能收藏",
         permissions: ["activeTab", "scripting", "sidePanel", "storage", "favicon", "contextMenus", "notifications", "tabs"],
         background: {
             service_worker: "background.js"
@@ -256,7 +256,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               "default": "Ctrl+Shift+E",
               "mac": "Command+Shift+E"
             },
-            "description": `打开/关闭 ${localSiteSettings.navTitle || "小苹果导航"} 侧边栏`
+            "description": `打开/关闭 ${localSiteSettings.navTitle || DEFAULT_SITE_TITLE} 侧边栏`
           }
         }
     };
@@ -273,10 +273,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     return JSON.stringify(json, null, 2);
   };
 
-  const extBackgroundJs = `// background.js - ${localSiteSettings.navTitle || '小苹果导航'} Assistant v7.6
+  const extBackgroundJs = `// background.js - ${localSiteSettings.navTitle || DEFAULT_SITE_TITLE} Assistant v7.6
 // 内置配置
 const CONFIG = {
-  name: "${localSiteSettings.navTitle || '小苹果导航'}",
+  name: "${localSiteSettings.navTitle || DEFAULT_SITE_TITLE}",
   apiBase: "${domain}",
   password: "${password}"
 };
@@ -863,7 +863,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const url = window.URL.createObjectURL(content);
         const a = document.createElement('a');
         a.href = url;
-        a.download = (localSiteSettings.navTitle || "小苹果导航") + "-Ext.zip";
+        a.download = (localSiteSettings.navTitle || DEFAULT_SITE_TITLE) + "-Ext.zip";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1186,11 +1186,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     安装指南 ({browserType === 'chrome' ? 'Chrome/Edge' : 'Firefox'}):
                                 </h5>
                                 <ol className="list-decimal list-inside text-sm text-slate-600 dark:text-slate-400 space-y-2 leading-relaxed">
-                                    <li>在电脑上新建文件夹 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">{(localSiteSettings.navTitle || "小苹果导航") + "-Pro"}</code>。</li>
+                                    <li>在电脑上新建文件夹 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">{(localSiteSettings.navTitle || DEFAULT_SITE_TITLE) + "-Pro"}</code>。</li>
                                     <li><strong>[重要]</strong> 将下方图标保存为 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">icon.png</code>。</li>
                                     <li>获取插件代码文件：
                                         <ul className="list-disc list-inside ml-4 mt-1 space-y-1 text-slate-500">
-                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载{localSiteSettings.navTitle || "小苹果导航"}Pro-浏览器插件"</span> 按钮，解压到该文件夹。</li>
+                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载{localSiteSettings.navTitle || DEFAULT_SITE_TITLE}Pro-浏览器插件"</span> 按钮，解压到该文件夹。</li>
                                             <li><strong>方式二 (备用)：</strong>分别点击下方代码块的 <Download size={12} className="inline"/> 按钮下载或复制 <code className="bg-white dark:bg-slate-900 px-1 rounded">manifest.json</code>, <code className="bg-white dark:bg-slate-900 px-1 rounded">background.js</code> 等文件到该文件夹。</li>
                                         </ul>
                                     </li>
@@ -1206,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     <li>1. 开启右上角的 "开发者模式" (Chrome)。</li>
                                     <li>2. 点击 "加载已解压的扩展程序"，选择包含上述文件的文件夹。</li>
                                     <li>3. 前往 <code className="select-all bg-white dark:bg-slate-900 px-1 rounded">chrome://extensions/shortcuts</code>。</li>
-                                    <li>4. <strong>[重要]</strong> 找到 "打开/关闭 {localSiteSettings.navTitle || "小苹果导航"} 侧边栏"，设置快捷键 (如 Ctrl+Shift+E)。</li>
+                                    <li>4. <strong>[重要]</strong> 找到 "打开/关闭 {localSiteSettings.navTitle || DEFAULT_SITE_TITLE} 侧边栏"，设置快捷键 (如 Ctrl+Shift+E)。</li>
                                 </ol>
                                 
                                 <div className="mt-4 mb-4">
@@ -1216,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-blue-500/20"
                                     >
                                         <Package size={20} />
-                                        {isZipping ? '打包中...' : `📦 一键下载${localSiteSettings.navTitle || "小苹果导航"}Pro-浏览器插件`}
+                                        {isZipping ? '打包中...' : `📦 一键下载${localSiteSettings.navTitle || DEFAULT_SITE_TITLE}Pro-浏览器插件`}
                                     </button>
                                 </div>
                                 

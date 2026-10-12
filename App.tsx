@@ -3,12 +3,13 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, GitFork, MoreVertical,
+  Pin, Settings, Lock, CloudCog, Github, MoreVertical,
   QrCode, Copy, LayoutGrid, List, Check, ExternalLink, ArrowRight, Activity
 } from 'lucide-react';
 import { 
     LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, 
-    WebDavConfig, AIConfig, SiteSettings, SearchEngine, DEFAULT_SEARCH_ENGINES 
+    WebDavConfig, AIConfig, SiteSettings, SearchEngine, DEFAULT_SEARCH_ENGINES,
+    DEFAULT_SITE_TITLE, DEFAULT_SITE_SETTINGS, SITE_SETTINGS_KEY
 } from './types';
 import Icon from './components/Icon';
 import { handleIconError } from './utils/favicon';
@@ -22,8 +23,7 @@ import SettingsModal from './components/SettingsModal';
 import SearchSettingsModal from './components/SearchSettingsModal';
 import DeadLinkCheckModal from './components/DeadLinkCheckModal';
 import UnlockScreen from './components/UnlockScreen';
-
-const GITHUB_REPO_URL = 'https://github.com/daihuan0612/CloudNav-';
+import AuthorBadge from './components/AuthorBadge';
 
 const LOCAL_STORAGE_KEY = 'cloudnav_data_cache';
 const AUTH_KEY = 'cloudnav_auth_token';
@@ -32,6 +32,20 @@ const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天免密
 const WEBDAV_CONFIG_KEY = 'cloudnav_webdav_config';
 const AI_CONFIG_KEY = 'cloudnav_ai_config';
 const SEARCH_ENGINES_KEY = 'cloudnav_search_engines';
+
+/* ------------------------------- 防护工具 -------------------------------
+ * 本地缓存或云端 KV 里如果有脏数据（不是数组、是字符串、字段类型不对），
+ * 直接拿去 .map() / 展开展开就会整页崩溃。下面两个小工具用来兜住这类情况。 */
+
+/** 保证拿到的一定是数组，否则退回默认值 */
+const asArray = <T,>(value: unknown, fallback: T[]): T[] =>
+  Array.isArray(value) ? (value as T[]) : fallback;
+
+/** 保证拿到的一定是普通对象（排除 null / 数组 / 字符串），否则返回 null */
+const asPlainObject = <T,>(value: unknown): Partial<T> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Partial<T>)
+    : null;
 
 function App() {
   // --- State ---
@@ -60,12 +74,13 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
-  // Site Settings - Initialized with defaults to prevent crash
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
-      title: '小苹果导航',
-      navTitle: '小苹果导航',
-      favicon: '',
-      cardStyle: 'detailed'
+  // Site Settings - 优先从本地缓存读取（解锁前也能用上上次保存的名称/图标）
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+      try {
+          const cached = localStorage.getItem(SITE_SETTINGS_KEY);
+          if (cached) return { ...DEFAULT_SITE_SETTINGS, ...JSON.parse(cached) };
+      } catch (e) {}
+      return { ...DEFAULT_SITE_SETTINGS };
   });
   
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -91,18 +106,12 @@ function App() {
               return JSON.parse(saved);
           } catch (e) {}
       }
-      
-      // Safe access to process env
-      let defaultKey = '';
-      try {
-          if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-              defaultKey = process.env.API_KEY;
-          }
-      } catch(e) {}
 
+      // 不预置任何 Key / 接口地址：由使用者在「设置 → AI 设置」里自己填。
+      // （AI 配置只存浏览器本地，不会上传到 KV 云端，换设备需重填。）
       return {
           provider: 'gemini',
-          apiKey: defaultKey, 
+          apiKey: '',
           baseUrl: '',
           model: 'gemini-2.5-flash'
       };
@@ -135,9 +144,13 @@ function App() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setLinks(parsed.links || INITIAL_LINKS);
-        setCategories(parsed.categories || DEFAULT_CATEGORIES);
-        if (parsed.settings) setSiteSettings(prev => ({ ...prev, ...parsed.settings }));
+        // 防护：脏缓存（字段类型不对）不再导致整页崩溃，一律退回默认值
+        setLinks(asArray<LinkItem>(parsed?.links, INITIAL_LINKS));
+        setCategories(asArray<Category>(parsed?.categories, DEFAULT_CATEGORIES));
+        const cachedSettings = asPlainObject<SiteSettings>(parsed?.settings);
+        if (cachedSettings) {
+          setSiteSettings(prev => ({ ...prev, ...cachedSettings }));
+        }
       } catch (e) {
         setLinks(INITIAL_LINKS);
         setCategories(DEFAULT_CATEGORIES);
@@ -237,10 +250,15 @@ function App() {
             });
             if (res.ok) {
                 const data = await res.json();
-                if (data.links && data.links.length > 0) {
-                    setLinks(data.links);
-                    setCategories(data.categories || DEFAULT_CATEGORIES);
-                    if (data.settings) setSiteSettings(prev => ({ ...prev, ...data.settings }));
+                const cloudLinks = asArray<LinkItem>(data?.links, []);
+                if (cloudLinks.length > 0) {
+                    setLinks(cloudLinks);
+                    // 防护：云端数据被手改坏 / 字段类型不对时，退回内置分类而不是崩掉
+                    setCategories(asArray<Category>(data?.categories, DEFAULT_CATEGORIES));
+                    const cloudSettings = asPlainObject<SiteSettings>(data?.settings);
+                    if (cloudSettings) {
+                        setSiteSettings(prev => ({ ...prev, ...cloudSettings }));
+                    }
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
                     return;
                 }
@@ -261,11 +279,15 @@ function App() {
   }, [authToken]);
 
   useEffect(() => {
-      document.title = siteSettings.title || '小苹果导航';
+      document.title = siteSettings.title || DEFAULT_SITE_TITLE;
       const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
       if (link && siteSettings.favicon) {
           link.href = siteSettings.favicon;
       }
+      // 回写本地缓存：让 index.html 下次加载时（包括解锁界面）直接用上自定义名称
+      try {
+          localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(siteSettings));
+      } catch (e) {}
   }, [siteSettings]);
 
   useEffect(() => {
@@ -474,7 +496,10 @@ function App() {
       const newCats = categories.filter(c => c.id !== catId);
       const targetId = 'common'; 
       const newLinks = links.map(l => l.categoryId === catId ? { ...l, categoryId: targetId } : l);
-      if (newCats.length === 0) newCats.push(DEFAULT_CATEGORIES[0]);
+      // 防护：分类被删空时补一个兜底分类（DEFAULT_CATEGORIES 若被清空也不能崩）
+      if (newCats.length === 0) {
+          newCats.push(DEFAULT_CATEGORIES[0] || { id: 'common', name: '常用推荐', icon: 'Star' });
+      }
       updateData(newLinks, newCats);
   };
 
@@ -798,7 +823,7 @@ function App() {
                  )}
              </div>
             <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent truncate">
-              {siteSettings.navTitle || '小苹果导航'}
+              {siteSettings.navTitle || DEFAULT_SITE_TITLE}
             </span>
         </div>
 
@@ -893,16 +918,9 @@ function App() {
                  {syncStatus === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
                  {authToken ? <span className="text-green-600">已同步</span> : <span className="text-amber-500">离线</span>}
                </div>
-               <a 
-                 href={GITHUB_REPO_URL} 
-                 target="_blank" 
-                 rel="noopener noreferrer"
-                 className="flex items-center gap-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                 title="Fork this project on GitHub"
-               >
-                 <GitFork size={14} />
-                 <span>Fork 项目</span>
-               </a>
+               {/* 署名徽标：文案与链接由 utils/author.ts 解码得到（产物中无明文），
+                   并被组件内的自愈逻辑保护 —— 见 components/AuthorBadge.tsx */}
+               <AuthorBadge />
             </div>
         </div>
       </aside>
