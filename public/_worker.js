@@ -339,7 +339,7 @@ const ICON_UA =
 const isImageResponse = (res) =>
   !!res && res.status === 200 && (res.headers.get('content-type') || '').toLowerCase().startsWith('image/');
 
-async function fetchIconUrl(url, timeoutMs, accept) {
+async function fetchIconUrl(url, timeoutMs, accept, cacheTtl) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -347,6 +347,8 @@ async function fetchIconUrl(url, timeoutMs, accept) {
       redirect: 'follow',
       signal: controller.signal,
       headers: { 'User-Agent': ICON_UA, Accept: accept },
+      // 让 Cloudflare 边缘也缓存上游响应（跨域同样有效）—— 与 Cache API 互为保险
+      cf: { cacheEverything: true, cacheTtl: cacheTtl || 3600 },
     });
   } finally {
     clearTimeout(timer);
@@ -356,7 +358,7 @@ async function fetchIconUrl(url, timeoutMs, accept) {
 /** 抓一张图并校验（必须是图片、不超上限）；不合格返回 null */
 async function fetchImage(url, timeoutMs) {
   try {
-    const r = await fetchIconUrl(url, timeoutMs, 'image/*,*/*;q=0.8');
+    const r = await fetchIconUrl(url, timeoutMs, 'image/*,*/*;q=0.8', ICON_CACHE_SECONDS);
     if (!isImageResponse(r)) {
       if (r.body) await r.body.cancel().catch(() => {});
       return null;
@@ -410,11 +412,18 @@ async function apiIcon(request, env, ctx) {
   try {
     cache = caches.default;
   } catch (e) {}
-  const cacheKey = new Request(`https://icon-cache.invalid/icon/${rawHost}`, { method: 'GET' });
+  // ⚠️ 缓存键必须是本站 zone 的 URL：用假域名（icon-cache.invalid）Cache API 会静默不生效
+  const cacheKey = new Request(new URL(`/api/icon?host=${encodeURIComponent(rawHost)}`, request.url).toString(), {
+    method: 'GET',
+  });
   if (cache) {
     try {
       const hit = await cache.match(cacheKey);
-      if (hit) return hit;
+      if (hit) {
+        const h = new Response(hit.body, hit);
+        h.headers.set('X-Icon-Cache', 'hit');
+        return h;
+      }
     } catch (e) {}
   }
 
@@ -432,7 +441,8 @@ async function apiIcon(request, env, ctx) {
       const page = await fetchIconUrl(
         `https://${rawHost}/`,
         ICON_PAGE_TIMEOUT_MS,
-        'text/html,application/xhtml+xml,*/*;q=0.8'
+        'text/html,application/xhtml+xml,*/*;q=0.8',
+        86400
       );
       if (page.status === 200) {
         const html = (await page.text()).slice(0, 300000);
@@ -460,6 +470,7 @@ async function apiIcon(request, env, ctx) {
     headers: {
       'Content-Type': best.type,
       'Cache-Control': `public, max-age=${ICON_CACHE_SECONDS}, immutable`,
+      'X-Icon-Cache': cache ? 'miss' : 'off',
       ...CORS,
     },
   });
