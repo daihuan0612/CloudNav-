@@ -117,7 +117,7 @@ const SearchSettingsModal: React.FC<SearchSettingsModalProps> = ({
                         }`}
                     >
                         <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-600 flex items-center justify-center shrink-0 overflow-hidden">
-                            {engine.icon.startsWith('http') ? (
+                            {(engine.icon || '').startsWith('http') ? (
                                 <img src={engine.icon} className="w-full h-full object-cover" />
                             ) : (
                                 <Globe size={16} className="text-slate-500 dark:text-slate-300"/>

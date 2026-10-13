@@ -76,6 +76,22 @@
       .fade-up { animation: fadeUp .45s cubic-bezier(.4,0,.2,1) both; }
       /* 分类标题渐变竖条 */
       .cat-bar { width: 4px; height: 20px; border-radius: 4px; background: linear-gradient(180deg, #3b82f6, #8b5cf6); box-shadow: 0 0 12px rgba(99,102,241,.35); }
+
+      /* 手机上长按卡片 = 右键（App.tsx 里的 handleCardTouchStart）。
+         这里禁掉 iOS 自带的"链接预览/放大镜"和文字选择，否则它们会和长按菜单抢同一个手势。 */
+      .no-callout {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      /* ⚠️ iOS Safari 的已知行为：聚焦到 font-size < 16px 的输入框时，会把整个页面放大，
+         而且失焦之后**不会自动缩回去**。本站的解锁密码框带 autoFocus、搜索框/各弹窗输入框
+         又都是 text-sm(14px)，于是"每次打开都是放大状态，必须手动捏一下"。
+         这里在手机/触屏设备上统一把输入类控件抬到 16px（鼠标桌面端保持原样，视觉不变）。 */
+      @media (max-width: 640px), (pointer: coarse) {
+        input, select, textarea { font-size: 16px !important; }
+      }
     </style>
 </head>
   <body class="bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 transition-colors duration-300">

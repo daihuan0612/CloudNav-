@@ -32,6 +32,20 @@ const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天免密
 const WEBDAV_CONFIG_KEY = 'cloudnav_webdav_config';
 const AI_CONFIG_KEY = 'cloudnav_ai_config';
 const SEARCH_ENGINES_KEY = 'cloudnav_search_engines';
+// 当前选中的搜索引擎 id：以前只放在内存里，刷新就跳回第一个引擎（手机/电脑各选各的）
+const SEARCH_ENGINE_ID_KEY = 'cloudnav_search_engine_id';
+
+/** 读一个字符串型缓存（persist 写进去的是 JSON，所以要 parse 回来） */
+const readCachedString = (key: string): string => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'string' ? parsed : '';
+  } catch {
+    return '';
+  }
+};
 
 /** localStorage 写入包装：无痕模式 / 配额满时 setItem 会抛异常，不能让它把整页带崩 */
 const persist = (key: string, value: unknown) => {
@@ -100,7 +114,8 @@ function App() {
       return DEFAULT_SEARCH_ENGINES.filter(e => e.id !== 'local');
   });
   const [activeEngineId, setActiveEngineId] = useState<string>(() => {
-      return externalEngines[0]?.id || 'google';
+      // 先看上次选的（刷新/换设备后别跳回第一个），再退回第一个引擎
+      return readCachedString(SEARCH_ENGINE_ID_KEY) || externalEngines[0]?.id || 'google';
   });
   const [isSearchSettingsOpen, setIsSearchSettingsOpen] = useState(false);
 
@@ -156,6 +171,18 @@ function App() {
   const isAutoScrollingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // 手机/平板没有右键 ⇒ 用"长按卡片"打开同一个菜单（见 handleCardTouchStart）
+  const longPressTimer = useRef<number | null>(null);
+  const longPressFired = useRef(false);
+  const longPressStart = useRef<{ x: number; y: number } | null>(null);
+
+  // 触屏设备（手机/平板）关掉 HTML5 拖拽：否则安卓长按会变成"拖动卡片"，跟长按菜单抢手势。
+  // 桌面鼠标环境不受影响（拖拽排序照旧）。
+  const isCoarsePointer = useMemo(
+    () => (typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
+    []
+  );
 
   // --- Helpers ---
 
@@ -251,7 +278,10 @@ function App() {
       const remoteEngineId = typeof data?.searchEngineId === 'string' && data.searchEngineId
           ? data.searchEngineId
           : null;
-      if (remoteEngineId) setActiveEngineId(remoteEngineId);
+      if (remoteEngineId) {
+          setActiveEngineId(remoteEngineId);
+          persist(SEARCH_ENGINE_ID_KEY, remoteEngineId);
+      }
 
       return {
           aiConfig: nextAi || aiConfig,
@@ -651,6 +681,15 @@ function App() {
       }
   };
 
+  // 选中的引擎：本地记一份 + 推云端，否则手机上选完刷新又跳回第一个
+  const handleSelectEngine = (engineId: string) => {
+      setActiveEngineId(engineId);
+      persist(SEARCH_ENGINE_ID_KEY, engineId);
+      if (authToken) {
+          syncToCloud(buildCloudPayload({ searchEngineId: engineId }), authToken);
+      }
+  };
+
   const isCategoryLocked = (catId: string) => {
       const cat = categories.find(c => c.id === catId);
       if (!cat || !cat.password) return false;
@@ -799,6 +838,52 @@ function App() {
       );
   };
 
+  /** 打开卡片菜单（桌面右键 / 手机长按共用）。x、y 是触发点，越界时往回收，别让菜单跑出屏幕 */
+  const openCardMenu = (x: number, y: number, link: LinkItem) => {
+      if (x + 180 > window.innerWidth) x = Math.max(8, window.innerWidth - 190);
+      if (y + 220 > window.innerHeight) y = Math.max(8, window.innerHeight - 230);
+      setContextMenu({ x, y, link });
+  };
+
+  const cancelLongPress = () => {
+      if (longPressTimer.current !== null) {
+          window.clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+      }
+  };
+
+  /** 手机长按 = 右键：按住 500ms 且手指基本没动才算长按（动了就是在滚页面，取消） */
+  const handleCardTouchStart = (e: React.TouchEvent, link: LinkItem) => {
+      const t = e.touches[0];
+      if (!t) return;
+      longPressFired.current = false;
+      longPressStart.current = { x: t.clientX, y: t.clientY };
+      cancelLongPress();
+      const { clientX, clientY } = t;
+      longPressTimer.current = window.setTimeout(() => {
+          longPressTimer.current = null;
+          longPressFired.current = true;
+          openCardMenu(clientX, clientY, link);
+          // 安卓有一下轻震动做反馈；iOS Safari 没有 vibrate，跳过
+          try { if (typeof navigator.vibrate === 'function') navigator.vibrate(15); } catch (err) {}
+      }, 500);
+  };
+
+  const handleCardTouchMove = (e: React.TouchEvent) => {
+      const start = longPressStart.current;
+      const t = e.touches[0];
+      if (!start || !t) return;
+      // 手指挪动超过 10px 就当成滚动/拖拽，别弹菜单
+      if (Math.abs(t.clientX - start.x) > 10 || Math.abs(t.clientY - start.y) > 10) cancelLongPress();
+  };
+
+  /** 松手：长按已经生效时吃掉这次 touchend —— 否则紧接着合成出来的 click 会把链接也打开 */
+  const handleCardTouchEnd = (e: React.TouchEvent) => {
+      cancelLongPress();
+      longPressStart.current = null;
+      if (longPressFired.current) e.preventDefault();
+  };
+
   const renderLinkCard = (link: LinkItem) => {
       const iconDisplay = link.icon ? (
          <img 
@@ -817,23 +902,32 @@ function App() {
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            draggable={true}
-            onDragStart={(e) => handleDragStart(e, link.id)}
+            draggable={!isCoarsePointer}
+            onDragStart={(e) => { cancelLongPress(); handleDragStart(e, link.id); }}
             onDragOver={(e) => handleDragOver(e, link.id)}
             onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleDrop(e, link.id); }}
             onDragEnd={handleDragEnd}
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                let x = e.clientX;
-                let y = e.clientY;
-                // Boundary adjustment
-                if (x + 180 > window.innerWidth) x = window.innerWidth - 190;
-                if (y + 220 > window.innerHeight) y = window.innerHeight - 230;
-                setContextMenu({ x, y, link });
+                // 安卓长按会另外触发 contextmenu：先把定时器撤掉，免得同一个菜单被开两次
+                cancelLongPress();
+                openCardMenu(e.clientX, e.clientY, link);
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-2.5 sm:p-3' : 'p-3 sm:p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up ${dragLinkId === link.id ? 'opacity-50' : ''} ${dragOverLinkId === link.id && dragLinkId && dragLinkId !== link.id ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
+            onTouchStart={(e) => handleCardTouchStart(e, link)}
+            onTouchMove={handleCardTouchMove}
+            onTouchEnd={handleCardTouchEnd}
+            onTouchCancel={handleCardTouchEnd}
+            onClick={(e) => {
+                // 长按刚弹过菜单：这一次 click 是松手时合成的，别让它把链接打开
+                if (longPressFired.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    longPressFired.current = false;
+                }
+            }}
+            className={`no-callout group relative flex flex-col ${isSimple ? 'p-2.5 sm:p-3' : 'p-3 sm:p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up ${dragLinkId === link.id ? 'opacity-50' : ''} ${dragOverLinkId === link.id && dragLinkId && dragLinkId !== link.id ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
             title={link.description || link.url}
         >
             {/* hover 渐变盖层（对齐老站 site-card::before） */}
@@ -981,7 +1075,7 @@ function App() {
         engines={externalEngines}
         activeEngineId={activeEngineId}
         onUpdateEngines={handleUpdateSearchEngines}
-        onSelectEngine={setActiveEngineId}
+        onSelectEngine={handleSelectEngine}
       />
 
       <DeadLinkCheckModal
