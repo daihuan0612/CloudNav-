@@ -12,7 +12,7 @@ import {
     DEFAULT_SITE_TITLE, DEFAULT_SITE_SETTINGS, SITE_SETTINGS_KEY, CloudData
 } from './types';
 import Icon from './components/Icon';
-import { handleIconError } from './utils/favicon';
+import { handleIconError, handleIconLoad, getInitialIconSrc } from './utils/favicon';
 import LinkModal from './components/LinkModal';
 import AuthModal from './components/AuthModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
@@ -885,14 +885,26 @@ function App() {
   };
 
   const renderLinkCard = (link: LinkItem) => {
-      const iconDisplay = link.icon ? (
-         <img 
-            src={link.icon} 
-            alt="" 
-            className="w-6 h-6 sm:w-7 sm:h-7 object-contain" 
-            onError={(e) => handleIconError(e, link.url, link.title)}
-         />
-      ) : link.title.charAt(0);
+      // 首字母永远垫在图片下面 ⇒ 图没回来/抓不到也不会是一片空白；
+      // 起始地址跳过 faviconextractor / gstatic 这类又慢又常抓不到真图的第三方（老数据里有 40+ 条），
+      // 直接走自己的图标代理（服务端抓 + 解析 <link rel=icon> + 边缘缓存 7 天）。
+      const startSrc = getInitialIconSrc(link.url, link.icon);
+      const iconDisplay = (
+          <>
+              <span aria-hidden="true" className="favicon-fallback-char select-none">{link.title.charAt(0)}</span>
+              {startSrc && (
+                 <img
+                    src={startSrc}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 m-auto w-6 h-6 sm:w-7 sm:h-7 object-contain"
+                    onLoad={(e) => handleIconLoad(e, link.title)}
+                    onError={(e) => handleIconError(e, link.url, link.title)}
+                 />
+              )}
+          </>
+      );
       
       const isSimple = siteSettings.cardStyle === 'simple';
 
@@ -933,7 +945,7 @@ function App() {
             {/* hover 渐变盖层（对齐老站 site-card::before） */}
             <div aria-hidden="true" className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
             <div className={`relative flex items-center gap-2 sm:gap-3 ${isSimple ? '' : 'mb-2'} pr-1 sm:pr-6`}>
-                <div className={`${isSimple ? 'w-7 h-7 text-xs sm:w-8 sm:h-8 sm:text-sm' : 'w-9 h-9 text-base sm:w-12 sm:h-12 sm:text-xl'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
+                <div className={`relative ${isSimple ? 'w-7 h-7 text-xs sm:w-8 sm:h-8 sm:text-sm' : 'w-9 h-9 text-base sm:w-12 sm:h-12 sm:text-xl'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
                     {iconDisplay}
                 </div>
                 <h3 className="font-medium text-sm sm:text-base text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">

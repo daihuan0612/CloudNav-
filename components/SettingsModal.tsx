@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
 import { AIConfig, LinkItem, Category, SiteSettings, DEFAULT_SITE_TITLE } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
-import { handleIconError } from '../utils/favicon';
+import { handleIconError, handleIconLoad, getInitialIconSrc } from '../utils/favicon';
 import JSZip from 'jszip';
 
 interface SettingsModalProps {
@@ -1097,8 +1097,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         <div className="cursor-move text-slate-400 hover:text-slate-600">
                                             <GripVertical size={16} />
                                         </div>
-                                        <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-600 flex items-center justify-center text-xs overflow-hidden">
-                                            {link.icon ? <img src={link.icon} className="w-full h-full object-cover" onError={(e) => handleIconError(e, link.url, link.title)} /> : link.title.charAt(0)}
+                                        <div className="relative w-6 h-6 rounded bg-slate-100 dark:bg-slate-600 flex items-center justify-center text-xs overflow-hidden">
+                                            <span aria-hidden="true" className="favicon-fallback-char select-none">{link.title.charAt(0)}</span>
+                                            <img src={getInitialIconSrc(link.url, link.icon)} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" onLoad={(e) => handleIconLoad(e, link.title)} onError={(e) => handleIconError(e, link.url, link.title)} />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-medium dark:text-slate-200 truncate">{link.title}</div>

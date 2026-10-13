@@ -4,7 +4,7 @@ import {
   Trash2, Loader2
 } from 'lucide-react';
 import { LinkItem } from '../types';
-import { handleIconError } from '../utils/favicon';
+import { handleIconError, handleIconLoad, getInitialIconSrc } from '../utils/favicon';
 
 type LocalState = 'ok' | 'fail' | 'na';
 type RemoteState = 'ok' | 'fail' | 'na';
@@ -302,12 +302,9 @@ export default function DeadLinkCheckModal({
                         key={link.id}
                         className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/60"
                       >
-                        <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
-                          {link.icon ? (
-                            <img src={link.icon} alt="" className="w-full h-full object-contain" onError={(e) => handleIconError(e, link.url, link.title)} />
-                          ) : (
-                            link.title.charAt(0)
-                          )}
+                        <div className="relative w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                          <span aria-hidden="true" className="favicon-fallback-char select-none">{link.title.charAt(0)}</span>
+                          <img src={getInitialIconSrc(link.url, link.icon)} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-contain" onLoad={(e) => handleIconLoad(e, link.title)} onError={(e) => handleIconError(e, link.url, link.title)} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
