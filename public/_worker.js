@@ -464,7 +464,25 @@ async function apiIcon(request, env, ctx) {
     if (best.buf.byteLength <= ICON_NICE_BYTES) break;
   }
 
-  if (!best) return json({ error: 'No icon' }, 404);
+  if (!best) {
+    // 负缓存：130 个域名里有 29 个站真的没有图标，不缓存的话每次打开都要白试一遍
+    // （每个约 2 秒，还占着浏览器每域名 6 个并发的额度）。存 1 天，比正缓存的 7 天短。
+    const neg = new Response(JSON.stringify({ error: 'No icon' }), {
+      status: 404,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=86400',
+        'X-Icon-Cache': cache ? 'miss' : 'off',
+        ...CORS,
+      },
+    });
+    if (cache) {
+      try {
+        ctx.waitUntil(cache.put(cacheKey, neg.clone()));
+      } catch (e) {}
+    }
+    return neg;
+  }
 
   const out = new Response(best.buf, {
     headers: {

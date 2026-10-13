@@ -62,12 +62,27 @@ export const getFaviconUrl = (url: string): string => {
 };
 
 /**
- * 统一的"起始图标地址"：data: 内嵌图 / 用户自己填的图 → 直接用；
- * 第三方图标服务（faviconextractor、gstatic…慢或被墙）→ 换成自己的代理，别让首跳就卡住。
+ * 统一的"起始图标地址"：
+ *   · data: 内嵌图 / 用户自己填的图（非第三方、不是本站 /favicon.ico）→ 直接用；
+ *   · 第三方图标服务（faviconextractor、gstatic…慢或被墙）→ 换成自己的代理；
+ *   · 站点自己的 /favicon.ico → 也换成代理：代理做的是同一件事，但会解析 <link rel=icon>
+ *     拿到真图、还带 7 天边缘缓存（实测用户自己那批站 /favicon.ico 多半是 404 或返回 HTML，
+ *     先试它等于白跑一趟）。
  */
 export const getInitialIconSrc = (linkUrl: string, storedIcon?: string): string => {
   const stored = storedIcon || '';
-  if (stored.startsWith('data:') || (stored && !isThirdPartyIcon(stored))) return stored;
+  const host = hostOf(linkUrl);
+  const isPlainFaviconIco = (() => {
+    if (!stored || stored.startsWith('data:') || !host) return false;
+    try {
+      const u = new URL(stored, 'https://placeholder.invalid');
+      return u.hostname === host && /\/favicon\.ico$/i.test(u.pathname);
+    } catch {
+      return false;
+    }
+  })();
+  if (stored.startsWith('data:')) return stored;
+  if (stored && !isThirdPartyIcon(stored) && !isPlainFaviconIco) return stored;
   return getIconProxyUrl(linkUrl) || stored;
 };
 
