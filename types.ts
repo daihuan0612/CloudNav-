@@ -62,6 +62,27 @@ export interface AIConfig {
   model: string;
 }
 
+/** 一份完整的导航数据 —— 云端 KV（`/api/storage`）与 WebDAV 备份文件共用同一结构。
+ *
+ *  `links` / `categories` / `settings` 是最早就有的字段；
+ *  `aiConfig` / `webdavConfig` / `searchEngines` 是后补的 —— 所以**全部可选**：
+ *  老备份文件、老 KV 数据里没有这些字段时按「未提供」处理，不会用空值覆盖本地已填好的配置。 */
+export interface CloudData {
+  links: LinkItem[];
+  categories: Category[];
+  settings?: SiteSettings;
+  aiConfig?: AIConfig;
+  webdavConfig?: WebDavConfig;
+  searchEngines?: SearchEngine[];
+  searchEngineId?: string;
+}
+
+/** WebDAV 备份文件：在 CloudData 之上带版本号与导出时间，方便以后做兼容迁移 */
+export interface BackupFile extends CloudData {
+  version?: number;
+  exportedAt?: string;
+}
+
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'common', name: '常用推荐', icon: 'Star' },
   { id: 'dev', name: '开发工具', icon: 'Code' },

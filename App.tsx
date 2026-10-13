@@ -9,7 +9,7 @@ import {
 import { 
     LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, 
     WebDavConfig, AIConfig, SiteSettings, SearchEngine, DEFAULT_SEARCH_ENGINES,
-    DEFAULT_SITE_TITLE, DEFAULT_SITE_SETTINGS, SITE_SETTINGS_KEY
+    DEFAULT_SITE_TITLE, DEFAULT_SITE_SETTINGS, SITE_SETTINGS_KEY, CloudData
 } from './types';
 import Icon from './components/Icon';
 import { handleIconError } from './utils/favicon';
@@ -33,6 +33,23 @@ const WEBDAV_CONFIG_KEY = 'cloudnav_webdav_config';
 const AI_CONFIG_KEY = 'cloudnav_ai_config';
 const SEARCH_ENGINES_KEY = 'cloudnav_search_engines';
 
+/** localStorage 写入包装：无痕模式 / 配额满时 setItem 会抛异常，不能让它把整页带崩 */
+const persist = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {}
+};
+
+/** AI 配置默认值：不预置任何 Key / 接口地址，由使用者在「设置 → AI 设置」里自己填 */
+const DEFAULT_AI_CONFIG: AIConfig = {
+  provider: 'gemini',
+  apiKey: '',
+  baseUrl: '',
+  model: 'gemini-2.5-flash',
+};
+
+const EMPTY_WEBDAV_CONFIG: WebDavConfig = { url: '', username: '', password: '', enabled: false };
+
 /* ------------------------------- 防护工具 -------------------------------
  * 本地缓存或云端 KV 里如果有脏数据（不是数组、是字符串、字段类型不对），
  * 直接拿去 .map() / 展开展开就会整页崩溃。下面两个小工具用来兜住这类情况。 */
@@ -46,6 +63,22 @@ const asPlainObject = <T,>(value: unknown): Partial<T> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Partial<T>)
     : null;
+
+/** 读取本地缓存（书签 / 分类 / 站点设置）。缓存缺失或损坏时返回 null，由调用方兜底。 */
+const readLocalCache = (): { links: LinkItem[]; categories: Category[]; settings?: Partial<SiteSettings> } | null => {
+  try {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    return {
+      links: asArray<LinkItem>(parsed?.links, INITIAL_LINKS),
+      categories: asArray<Category>(parsed?.categories, DEFAULT_CATEGORIES),
+      settings: asPlainObject<SiteSettings>(parsed?.settings) || undefined,
+    };
+  } catch (e) {
+    return null;
+  }
+};
 
 function App() {
   // --- State ---
@@ -92,29 +125,16 @@ function App() {
 
   const [unlockedCategoryIds, setUnlockedCategoryIds] = useState<Set<string>>(new Set());
 
-  const [webDavConfig, setWebDavConfig] = useState<WebDavConfig>({
-      url: '',
-      username: '',
-      password: '',
-      enabled: false
-  });
+  const [webDavConfig, setWebDavConfig] = useState<WebDavConfig>({ ...EMPTY_WEBDAV_CONFIG });
 
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
       const saved = localStorage.getItem(AI_CONFIG_KEY);
       if (saved) {
           try {
-              return JSON.parse(saved);
+              return { ...DEFAULT_AI_CONFIG, ...JSON.parse(saved) };
           } catch (e) {}
       }
-
-      // 不预置任何 Key / 接口地址：由使用者在「设置 → AI 设置」里自己填。
-      // （AI 配置只存浏览器本地，不会上传到 KV 云端，换设备需重填。）
-      return {
-          provider: 'gemini',
-          apiKey: '',
-          baseUrl: '',
-          model: 'gemini-2.5-flash'
-      };
+      return { ...DEFAULT_AI_CONFIG };
   });
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -140,20 +160,12 @@ function App() {
   // --- Helpers ---
 
   const loadFromLocal = () => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        // 防护：脏缓存（字段类型不对）不再导致整页崩溃，一律退回默认值
-        setLinks(asArray<LinkItem>(parsed?.links, INITIAL_LINKS));
-        setCategories(asArray<Category>(parsed?.categories, DEFAULT_CATEGORIES));
-        const cachedSettings = asPlainObject<SiteSettings>(parsed?.settings);
-        if (cachedSettings) {
-          setSiteSettings(prev => ({ ...prev, ...cachedSettings }));
-        }
-      } catch (e) {
-        setLinks(INITIAL_LINKS);
-        setCategories(DEFAULT_CATEGORIES);
+    const cached = readLocalCache();
+    if (cached) {
+      setLinks(cached.links);
+      setCategories(cached.categories);
+      if (cached.settings) {
+        setSiteSettings(prev => ({ ...prev, ...cached.settings }));
       }
     } else {
       setLinks(INITIAL_LINKS);
@@ -161,7 +173,20 @@ function App() {
     }
   };
 
-  const syncToCloud = async (newLinks: LinkItem[], newCategories: Category[], newSettings: SiteSettings, token: string) => {
+  /** 当前"该同步的东西"全集：书签 / 分类 / 站点设置 + AI 配置 + WebDAV 配置 + 搜索引擎。
+   *  以前只有前三样进云端，所以换设备（手机）看不到 AI 与 DAV —— 这里把它们一起带上。 */
+  const buildCloudPayload = (over: Partial<CloudData> = {}): CloudData => ({
+      links,
+      categories,
+      settings: siteSettings,
+      aiConfig,
+      webdavConfig: webDavConfig,
+      searchEngines: externalEngines,
+      searchEngineId: activeEngineId,
+      ...over,
+  });
+
+  const syncToCloud = async (payload: CloudData, token: string) => {
     setSyncStatus('saving');
     try {
         const response = await fetch('/api/storage', {
@@ -170,7 +195,7 @@ function App() {
                 'Content-Type': 'application/json',
                 'x-auth-password': token
             },
-            body: JSON.stringify({ links: newLinks, categories: newCategories, settings: newSettings })
+            body: JSON.stringify(payload)
         });
 
         if (response.status === 401) {
@@ -193,13 +218,56 @@ function App() {
     }
   };
 
-  const updateData = (newLinks: LinkItem[], newCategories: Category[], newSettings: SiteSettings = siteSettings) => {
+  /** 把远端（云端 KV 或 WebDAV 备份文件）里的「配置类」数据合并进当前状态。
+   *  - AI / WebDAV / 搜索引擎以前只存浏览器本地，所以老数据里没有这些字段 → 一律按"未提供"处理；
+   *  - 远端值为空（AI 没填 Key / DAV 没填地址 / 引擎列表为空）时也忽略，避免用空值把本地已填好的配置冲掉。
+   *  返回值是"合并后的完整配置"，调用方可以立刻拿它去推送，不必等 React 状态更新。 */
+  const applyRemoteConfig = (data: Partial<CloudData> | null | undefined) => {
+      const remoteAi = asPlainObject<AIConfig>(data?.aiConfig);
+      const nextAi = remoteAi && String(remoteAi.apiKey || '').trim()
+          ? { ...DEFAULT_AI_CONFIG, ...remoteAi }
+          : null;
+      if (nextAi) {
+          setAiConfig(nextAi);
+          persist(AI_CONFIG_KEY, nextAi);
+      }
+
+      const remoteDav = asPlainObject<WebDavConfig>(data?.webdavConfig);
+      const nextDav = remoteDav && String(remoteDav.url || '').trim()
+          ? { ...EMPTY_WEBDAV_CONFIG, ...remoteDav }
+          : null;
+      if (nextDav) {
+          setWebDavConfig(nextDav);
+          persist(WEBDAV_CONFIG_KEY, nextDav);
+      }
+
+      const remoteEngines = asArray<SearchEngine>(data?.searchEngines, []);
+      const nextEngines = remoteEngines.length > 0 ? remoteEngines : null;
+      if (nextEngines) {
+          setExternalEngines(nextEngines);
+          persist(SEARCH_ENGINES_KEY, nextEngines);
+      }
+
+      const remoteEngineId = typeof data?.searchEngineId === 'string' && data.searchEngineId
+          ? data.searchEngineId
+          : null;
+      if (remoteEngineId) setActiveEngineId(remoteEngineId);
+
+      return {
+          aiConfig: nextAi || aiConfig,
+          webdavConfig: nextDav || webDavConfig,
+          searchEngines: nextEngines || externalEngines,
+          searchEngineId: remoteEngineId || activeEngineId,
+      };
+  };
+
+  const updateData = (newLinks: LinkItem[], newCategories: Category[], newSettings: SiteSettings = siteSettings, configOverride?: Partial<CloudData>) => {
       setLinks(newLinks);
       setCategories(newCategories);
       setSiteSettings(newSettings);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ links: newLinks, categories: newCategories, settings: newSettings }));
+      persist(LOCAL_STORAGE_KEY, { links: newLinks, categories: newCategories, settings: newSettings });
       if (authToken) {
-          syncToCloud(newLinks, newCategories, newSettings, authToken);
+          syncToCloud(buildCloudPayload({ links: newLinks, categories: newCategories, settings: newSettings, ...configOverride }), authToken);
       }
   };
 
@@ -248,25 +316,56 @@ function App() {
             const res = await fetch('/api/storage', {
                 headers: { 'x-auth-password': authToken }
             });
-            if (res.ok) {
-                const data = await res.json();
-                const cloudLinks = asArray<LinkItem>(data?.links, []);
-                if (cloudLinks.length > 0) {
-                    setLinks(cloudLinks);
-                    // 防护：云端数据被手改坏 / 字段类型不对时，退回内置分类而不是崩掉
-                    setCategories(asArray<Category>(data?.categories, DEFAULT_CATEGORIES));
-                    const cloudSettings = asPlainObject<SiteSettings>(data?.settings);
-                    if (cloudSettings) {
-                        setSiteSettings(prev => ({ ...prev, ...cloudSettings }));
-                    }
-                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
-                    return;
-                }
-            } else if (res.status === 401) {
+            if (res.status === 401) {
                 // 密码已失效，清除登录态回到解锁界面
                 setAuthToken('');
                 localStorage.removeItem(AUTH_KEY);
                 localStorage.removeItem(AUTH_EXPIRY_KEY);
+                return;
+            }
+            if (res.ok) {
+                const data = await res.json();
+                const cloudLinks = asArray<LinkItem>(data?.links, []);
+                const cloudSettings = asPlainObject<SiteSettings>(data?.settings);
+                const localCache = readLocalCache();
+
+                if (cloudLinks.length > 0) {
+                    setLinks(cloudLinks);
+                    // 防护：云端数据被手改坏 / 字段类型不对时，退回内置分类而不是崩掉
+                    setCategories(asArray<Category>(data?.categories, DEFAULT_CATEGORIES));
+                    if (cloudSettings) {
+                        setSiteSettings(prev => ({ ...prev, ...cloudSettings }));
+                    }
+                    persist(LOCAL_STORAGE_KEY, data);
+                } else {
+                    // 云端还没有数据：退回本地缓存，别把页面留成空白
+                    loadFromLocal();
+                }
+
+                // 配置类数据（AI / WebDAV / 搜索引擎）单独合并 —— 老云端数据里没有这几个字段是正常的
+                const cfg = applyRemoteConfig(data);
+
+                // 需要"把本地这份顶上去"的两种情况：
+                //  ① 云端连书签都没有、本地却有（首次部署 / 刚换 KV）
+                //  ② 云端还没有配置类字段、本地却已经填好了 AI Key 或 DAV 地址
+                //     —— 老版本这些只存本地，不补传的话用户还得回电脑上再点一次"保存"才同步得到手机
+                const cloudHasConfig = !!(data?.aiConfig || data?.webdavConfig);
+                const needPushLinks = cloudLinks.length === 0 && !!localCache && localCache.links.length > 0;
+                const needPushConfig = !cloudHasConfig && !!(cfg.aiConfig?.apiKey || cfg.webdavConfig?.url);
+
+                if (needPushLinks || needPushConfig) {
+                    syncToCloud({
+                        links: needPushLinks && localCache ? localCache.links : cloudLinks,
+                        categories: needPushLinks && localCache
+                            ? localCache.categories
+                            : asArray<Category>(data?.categories, DEFAULT_CATEGORIES),
+                        // 只补配置时，站点设置以云端为准（刚合并过的那份），别拿本地旧值把云端覆盖回去
+                        settings: needPushLinks && localCache
+                            ? { ...siteSettings, ...(localCache.settings || {}) }
+                            : { ...siteSettings, ...(cloudSettings || {}) },
+                        ...cfg,
+                    }, authToken);
+                }
                 return;
             }
         } catch (e) {
@@ -361,17 +460,17 @@ function App() {
   };
 
   // --- Handlers ---
+  // 只校验密码，**不**顺手把本地数据 POST 上去：
+  // 旧写法用 POST /api/storage 当"验证"，于是新设备（手机）第一次登录时会拿它那份空数据
+  // 覆盖云端已有内容。现在改成 /api/verify，数据统一由上面的 useEffect 从云端拉。
   const handleLogin = async (password: string): Promise<boolean> => {
       try {
-        const response = await fetch('/api/storage', {
+        const response = await fetch('/api/verify', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-auth-password': password
-            },
-            body: JSON.stringify({ links, categories, settings: siteSettings })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
         });
-        
+
         if (response.ok) {
             setAuthToken(password);
             localStorage.setItem(AUTH_KEY, password);
@@ -454,12 +553,12 @@ function App() {
 
   const handleSaveAIConfig = (config: AIConfig, newSiteSettings: SiteSettings) => {
       setAiConfig(config);
-      localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+      persist(AI_CONFIG_KEY, config);
+      setSiteSettings(newSiteSettings);
+      persist(LOCAL_STORAGE_KEY, { links, categories, settings: newSiteSettings });
+      // AI 配置也要进云端，否则手机/别的电脑上看不到（以前只写 localStorage）
       if (authToken) {
-          updateData(links, categories, newSiteSettings);
-      } else {
-          setSiteSettings(newSiteSettings);
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ links, categories, settings: newSiteSettings }));
+          syncToCloud(buildCloudPayload({ settings: newSiteSettings, aiConfig: config }), authToken);
       }
   };
 
@@ -476,7 +575,9 @@ function App() {
       const el = document.getElementById(`cat-${catId}`);
       if (el) {
           isAutoScrollingRef.current = true;
-          const top = el.offsetTop - 80;
+          // 手机顶栏是两行（标题 + 搜索），比桌面高一截，锚点偏移要跟着变，否则分类标题会被顶栏压住
+          const stickyOffset = typeof window !== 'undefined' && window.innerWidth < 640 ? 122 : 80;
+          const top = el.offsetTop - stickyOffset;
           mainRef.current?.scrollTo({ top, behavior: 'smooth' });
           setTimeout(() => isAutoScrollingRef.current = false, 800);
       }
@@ -505,11 +606,26 @@ function App() {
 
   const handleSaveWebDavConfig = (config: WebDavConfig) => {
       setWebDavConfig(config);
-      localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify(config));
+      persist(WEBDAV_CONFIG_KEY, config);
+      // 同上：WebDAV 配置也要进云端，手机/别的电脑才看得到
+      if (authToken) {
+          syncToCloud(buildCloudPayload({ webdavConfig: config }), authToken);
+      }
   };
 
-  const handleRestoreBackup = (restoredLinks: LinkItem[], restoredCategories: Category[]) => {
-      updateData(restoredLinks, restoredCategories);
+  const handleRestoreBackup = (data: CloudData) => {
+      const restoredLinks = asArray<LinkItem>(data?.links, []);
+      const restoredCategories = asArray<Category>(data?.categories, DEFAULT_CATEGORIES);
+      const restoredSettings = asPlainObject<SiteSettings>(data?.settings);
+      // 先合并配置类数据（AI / DAV / 搜索引擎），拿到合并后的值再一次性写回云端，
+      // 否则这次 updateData 推上去的还是旧配置。
+      const cfg = applyRemoteConfig(data);
+      updateData(
+          restoredLinks,
+          restoredCategories,
+          restoredSettings ? { ...siteSettings, ...restoredSettings } : siteSettings,
+          cfg
+      );
       setIsBackupModalOpen(false);
   };
   
@@ -529,7 +645,10 @@ function App() {
 
   const handleUpdateSearchEngines = (newEngines: SearchEngine[]) => {
       setExternalEngines(newEngines);
-      localStorage.setItem(SEARCH_ENGINES_KEY, JSON.stringify(newEngines));
+      persist(SEARCH_ENGINES_KEY, newEngines);
+      if (authToken) {
+          syncToCloud(buildCloudPayload({ searchEngines: newEngines }), authToken);
+      }
   };
 
   const isCategoryLocked = (catId: string) => {
@@ -609,12 +728,83 @@ function App() {
 
   // --- Render Components ---
 
+  /** 卡片网格：手机（<640px）固定一行两个小卡片；sm 以上恢复原来的自适应多列 */
+  const cardGridClass = siteSettings.cardStyle === 'simple'
+      ? 'grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]'
+      : 'grid grid-cols-2 gap-3 sm:gap-5 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]';
+
+  /** 搜索栏。桌面端（desktop）塞在标题栏里；手机端（mobile）是标题栏下面的第二行 ——
+   *  两者都在同一个 sticky 顶栏内，所以手机上滚动时搜索框一直可见。 */
+  const renderSearchBar = (variant: 'desktop' | 'mobile') => {
+      const isMobile = variant === 'mobile';
+
+      const pillClass = (mode: 'local' | 'external') =>
+          `font-medium rounded-full transition-all duration-200 ${isMobile ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'} ${
+              searchMode === mode
+                  ? (mode === 'external'
+                      ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-md'
+                      : 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-md')
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+          }`;
+
+      return (
+        <div className={isMobile
+            ? 'sm:hidden flex items-center gap-2 px-4 pb-3'
+            : 'relative w-full max-w-xl hidden sm:flex items-center gap-3'}>
+            {/* 站内 / 站外 切换 */}
+            <div className="bg-slate-100/80 dark:bg-slate-700/70 p-1 rounded-full flex items-center shrink-0 shadow-inner">
+                <button onClick={() => setSearchMode('local')} className={pillClass('local')}>站内</button>
+                <button onClick={() => setSearchMode('external')} className={pillClass('external')}>站外</button>
+            </div>
+
+            {/* 搜索引擎管理（仅站外模式） */}
+            {searchMode === 'external' && (
+                <button
+                    onClick={() => setIsSearchSettingsOpen(true)}
+                    className={`${isMobile ? 'p-1.5' : 'p-2'} text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors shrink-0`}
+                    title="管理搜索引擎"
+                >
+                    <Settings size={isMobile ? 16 : 18} />
+                </button>
+            )}
+
+            {/* 搜索输入框 */}
+            <form onSubmit={handleSearchSubmit} className="flex-1 min-w-0 relative flex items-center group">
+                <input
+                    ref={isMobile ? undefined : searchInputRef}
+                    type="text"
+                    placeholder={searchMode === 'local' ? "搜索书签..." : `在 ${activeExternalEngine?.name} 搜索...`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`w-full ${isMobile ? 'pl-9 pr-9 py-2' : 'pl-10 pr-4 py-2'} bg-white/70 dark:bg-slate-700/40 hover:bg-white dark:hover:bg-slate-700/70 border border-slate-200/70 dark:border-slate-600/40 rounded-full text-sm dark:text-white placeholder-slate-400 outline-none transition-all duration-200 focus:bg-white dark:focus:bg-slate-700/90 focus:ring-2 focus:ring-blue-500/40 focus:shadow-glow`}
+                />
+                <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center gap-2">
+                    {searchMode === 'local' ? (
+                        <Search size={16} />
+                    ) : activeExternalEngine?.icon?.startsWith('http') ? (
+                        <img src={activeExternalEngine.icon} className="w-4 h-4 rounded-full object-cover" />
+                    ) : (
+                        <Search size={16} />
+                    )}
+                </div>
+
+                {/* Visual Indicator for Search */}
+                {searchQuery && (
+                    <button type="submit" className="absolute right-2 p-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 rounded-full hover:bg-blue-200 transition-colors">
+                        <ArrowRight size={14} />
+                    </button>
+                )}
+            </form>
+        </div>
+      );
+  };
+
   const renderLinkCard = (link: LinkItem) => {
       const iconDisplay = link.icon ? (
          <img 
             src={link.icon} 
             alt="" 
-            className="w-7 h-7 object-contain" 
+            className="w-6 h-6 sm:w-7 sm:h-7 object-contain" 
             onError={(e) => handleIconError(e, link.url, link.title)}
          />
       ) : link.title.charAt(0);
@@ -643,21 +833,21 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-3' : 'p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up ${dragLinkId === link.id ? 'opacity-50' : ''} ${dragOverLinkId === link.id && dragLinkId && dragLinkId !== link.id ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
+            className={`group relative flex flex-col ${isSimple ? 'p-2.5 sm:p-3' : 'p-3 sm:p-5'} bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 shadow-card card-lift fade-up ${dragLinkId === link.id ? 'opacity-50' : ''} ${dragOverLinkId === link.id && dragLinkId && dragLinkId !== link.id ? 'ring-2 ring-blue-400 border-blue-400' : ''}`}
             title={link.description || link.url}
         >
             {/* hover 渐变盖层（对齐老站 site-card::before） */}
             <div aria-hidden="true" className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-            <div className={`relative flex items-center gap-3 ${isSimple ? '' : 'mb-2'} pr-6`}>
-                <div className={`${isSimple ? 'w-8 h-8 text-sm' : 'w-12 h-12 text-xl'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
+            <div className={`relative flex items-center gap-2 sm:gap-3 ${isSimple ? '' : 'mb-2'} pr-1 sm:pr-6`}>
+                <div className={`${isSimple ? 'w-7 h-7 text-xs sm:w-8 sm:h-8 sm:text-sm' : 'w-9 h-9 text-base sm:w-12 sm:h-12 sm:text-xl'} rounded-xl bg-gradient-to-br from-white to-blue-50 dark:from-slate-700 dark:to-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-600/50 transition-all duration-200 group-hover:scale-105`}>
                     {iconDisplay}
                 </div>
-                <h3 className="font-medium text-base text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                <h3 className="font-medium text-sm sm:text-base text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                     {link.title}
                 </h3>
             </div>
             {!isSimple && (
-                <div className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1 h-5 w-full overflow-hidden">
+                <div className="hidden sm:block text-sm text-slate-500 dark:text-slate-400 line-clamp-1 h-5 w-full overflow-hidden">
                     {link.description || <span className="opacity-0">.</span>}
                 </div>
             )}
@@ -756,6 +946,10 @@ function App() {
         onClose={() => setIsBackupModalOpen(false)}
         links={links}
         categories={categories}
+        siteSettings={siteSettings}
+        aiConfig={aiConfig}
+        searchEngines={externalEngines}
+        searchEngineId={activeEngineId}
         onRestore={handleRestoreBackup}
         webDavConfig={webDavConfig}
         onSaveWebDavConfig={handleSaveWebDavConfig}
@@ -929,77 +1123,15 @@ function App() {
           ref={mainRef}
           className="flex-1 flex flex-col h-full overflow-y-auto relative scroll-smooth"
       >
-        <header className="h-16 px-4 lg:px-8 flex items-center justify-between bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 z-30 shrink-0">
-          <div className="flex items-center gap-4 flex-1">
+        <header className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 z-30 shrink-0">
+          <div className="h-16 px-4 lg:px-8 flex items-center justify-between">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 dark:text-slate-300">
               <Menu size={24} />
             </button>
 
-            {/* Redesigned Search Bar */}
-            <div className="relative w-full max-w-xl hidden sm:flex items-center gap-3">
-                {/* Search Mode Toggle (Pill) */}
-                <div className="bg-slate-100/80 dark:bg-slate-700/70 p-1 rounded-full flex items-center shrink-0 shadow-inner">
-                    <button
-                        onClick={() => setSearchMode('local')}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
-                            searchMode === 'local' 
-                            ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-md' 
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
-                    >
-                        站内
-                    </button>
-                    <button
-                        onClick={() => setSearchMode('external')}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
-                            searchMode === 'external' 
-                            ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-md' 
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                        }`}
-                    >
-                        站外
-                    </button>
-                </div>
-
-                {/* Settings Gear (Visible only for External) */}
-                {searchMode === 'external' && (
-                    <button 
-                        onClick={() => setIsSearchSettingsOpen(true)}
-                        className="p-2 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors animate-in fade-in slide-in-from-left-2 duration-200"
-                        title="管理搜索引擎"
-                    >
-                        <Settings size={18} />
-                    </button>
-                )}
-
-                {/* Search Input */}
-                <form onSubmit={handleSearchSubmit} className="flex-1 relative flex items-center group">
-                    <input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder={searchMode === 'local' ? "搜索书签..." : `在 ${activeExternalEngine?.name} 搜索...`}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-white/70 dark:bg-slate-700/40 hover:bg-white dark:hover:bg-slate-700/70 border border-slate-200/70 dark:border-slate-600/40 rounded-full text-sm dark:text-white placeholder-slate-400 outline-none transition-all duration-200 focus:bg-white dark:focus:bg-slate-700/90 focus:ring-2 focus:ring-blue-500/40 focus:shadow-glow"
-                    />
-                    <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center gap-2">
-                        {searchMode === 'local' ? (
-                            <Search size={16} />
-                        ) : activeExternalEngine?.icon?.startsWith('http') ? (
-                            <img src={activeExternalEngine.icon} className="w-4 h-4 rounded-full object-cover" />
-                        ) : (
-                            <Search size={16} />
-                        )}
-                    </div>
-                    
-                    {/* Visual Indicator for Search */}
-                    {searchQuery && (
-                        <button type="submit" className="absolute right-2 p-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 rounded-full hover:bg-blue-200 transition-colors">
-                            <ArrowRight size={14} />
-                        </button>
-                    )}
-                </form>
-            </div>
+            {/* 搜索栏（桌面端）：手机端在下面单独一行，同属这个常驻顶栏 */}
+            {renderSearchBar('desktop')}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1037,9 +1169,13 @@ function App() {
               <Plus size={16} /> <span className="hidden sm:inline">添加</span>
             </button>
           </div>
+          </div>
+
+          {/* 搜索栏（手机端）：顶栏的第二行，和标题栏一起常驻，滚动时不消失 */}
+          {renderSearchBar('mobile')}
         </header>
 
-        <div className="p-4 lg:p-8 space-y-8">
+        <div className="p-3 sm:p-4 lg:p-8 space-y-6 sm:space-y-8">
             
             {pinnedLinks.length > 0 && !searchQuery && (
                 <section>
@@ -1049,7 +1185,7 @@ function App() {
                             置顶 / 常用
                         </h2>
                     </div>
-                    <div className={`grid ${siteSettings.cardStyle === 'simple' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4' : 'grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5'}`}>
+                    <div className={cardGridClass}>
                         {pinnedLinks.map(link => renderLinkCard(link))}
                     </div>
                 </section>
@@ -1101,7 +1237,7 @@ function App() {
                                         暂无链接
                                     </div>
                                 ) : (
-                                    <div className={`grid ${siteSettings.cardStyle === 'simple' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4' : 'grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5'}`}>
+                                    <div className={cardGridClass}>
                                         {catLinks.map(link => renderLinkCard(link))}
                                     </div>
                                 )}

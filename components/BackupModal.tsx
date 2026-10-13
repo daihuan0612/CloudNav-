@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Cloud, Download, Upload, CheckCircle2, AlertCircle, RefreshCw, Save } from 'lucide-react';
-import { Category, LinkItem, WebDavConfig } from '../types';
+import { AIConfig, BackupFile, Category, LinkItem, SearchEngine, SiteSettings, WebDavConfig } from '../types';
 import { checkWebDavConnection, uploadBackup, downloadBackup } from '../services/webDavService';
 import { generateBookmarkHtml, downloadHtmlFile } from '../services/exportService';
 
@@ -9,13 +9,21 @@ interface BackupModalProps {
   onClose: () => void;
   links: LinkItem[];
   categories: Category[];
-  onRestore: (links: LinkItem[], categories: Category[]) => void;
+  siteSettings: SiteSettings;
+  aiConfig: AIConfig;
+  searchEngines: SearchEngine[];
+  searchEngineId: string;
+  onRestore: (data: BackupFile) => void;
   webDavConfig: WebDavConfig;
   onSaveWebDavConfig: (config: WebDavConfig) => void;
 }
 
+/** 备份文件版本：2 起带上站点设置 + AI / WebDAV / 搜索引擎配置（1 及更早只有书签和分类） */
+const BACKUP_VERSION = 2;
+
 const BackupModal: React.FC<BackupModalProps> = ({ 
-  isOpen, onClose, links, categories, onRestore, webDavConfig, onSaveWebDavConfig 
+  isOpen, onClose, links, categories, siteSettings, aiConfig, searchEngines, searchEngineId,
+  onRestore, webDavConfig, onSaveWebDavConfig 
 }) => {
   const [config, setConfig] = useState<WebDavConfig>(webDavConfig);
   const [isTesting, setIsTesting] = useState(false);
@@ -47,10 +55,25 @@ const BackupModal: React.FC<BackupModalProps> = ({
     }
   };
 
+  /** 备份内容 = 书签 + 分类 + 站点设置 + AI 配置 + WebDAV 配置 + 搜索引擎。
+   *  以前只传 links/categories，所以「换设备恢复」后 AI 和 DAV 都得重填。 */
+  const buildBackupPayload = (): BackupFile => ({
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      links,
+      categories,
+      settings: siteSettings,
+      aiConfig,
+      // 用面板里当前填的值（而不是已保存的），这样"填好直接上传"也不会漏
+      webdavConfig: config,
+      searchEngines,
+      searchEngineId,
+  });
+
   const handleBackupToCloud = async () => {
     setSyncStatus('uploading');
     setStatusMsg('正在上传...');
-    const success = await uploadBackup(config, { links, categories });
+    const success = await uploadBackup(config, buildBackupPayload());
     if (success) {
         setSyncStatus('success');
         setStatusMsg('备份成功！');
@@ -61,14 +84,14 @@ const BackupModal: React.FC<BackupModalProps> = ({
   };
 
   const handleRestoreFromCloud = async () => {
-    if (!confirm("确定要从 WebDAV 恢复吗？这将覆盖当前的本地数据。")) return;
+    if (!confirm("确定要从 WebDAV 恢复吗？这会覆盖当前的书签、分类、站点设置，以及 AI / WebDAV 配置。")) return;
     
     setSyncStatus('downloading');
     setStatusMsg('正在下载...');
     const data = await downloadBackup(config);
     
     if (data) {
-        onRestore(data.links, data.categories);
+        onRestore(data);
         setSyncStatus('success');
         setStatusMsg('恢复成功！');
     } else {
@@ -171,6 +194,9 @@ const BackupModal: React.FC<BackupModalProps> = ({
             {/* Section 2: Sync Actions */}
             <section className="space-y-4">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">云端同步操作</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">
+                    备份内容：书签、分类、站点设置（站名/图标/卡片样式）、AI 配置、WebDAV 配置、搜索引擎。
+                </p>
                 <div className="grid grid-cols-2 gap-4">
                     <button 
                         onClick={handleBackupToCloud}
