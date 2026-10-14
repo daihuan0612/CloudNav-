@@ -270,16 +270,43 @@ async function webdavPost(request, env) {
     let method = 'PROPFIND';
     const headers = { Authorization: authHeader, 'User-Agent': 'CloudNav/1.0' };
     let requestBody;
+    let replacedOld = false; // 上传时是否真的覆盖掉了旧备份（给前端/排查用）
+    let deletedStatus = null; // 覆盖时那次 DELETE 的返回码（排查用：204=真删掉了）
 
     if (operation === 'check') {
       fetchUrl = baseUrl;
       method = 'PROPFIND';
       headers['Depth'] = '0';
     } else if (operation === 'upload') {
+      // ⚠️ 图床（CloudFlare-ImgBed 等）的 WebDAV 是**简化实现：PUT 不做覆盖** ——
+      //    它把内容转手给普通上传接口，同名文件会被自动改名成 cloudnav_backup(1).json、(2).json…
+      //    （图床 functions/upload/uploadTools.js 的 buildUniqueFileId 里那段 counter 逻辑）。
+      //    不删旧文件的话，图库里会越堆越多；而"恢复"读的是固定名，永远只能读到**最早**那一份。
+      // ⇒ 上传前先探测、存在就先删，再 PUT，保证永远只有一个 cloudnav_backup.json（且是最新的）。
+      const probe = await fetch(fileUrl, { method: 'PROPFIND', headers: { ...headers, Depth: '0' } });
+      const existed = probe.status === 207;
+      if (probe.body) await probe.body.cancel().catch(() => {});
+      if (existed) {
+        const del = await fetch(fileUrl, { method: 'DELETE', headers });
+        if (del.body) await del.body.cancel().catch(() => {});
+        deletedStatus = del.status;
+        if (!del.ok && del.status !== 404) {
+          // 删不掉就别传：否则又会多出一份 (N)，而恢复读的还是旧的那一份 —— 静默出错更糟
+          return json(
+            {
+              error: `删除旧备份失败（HTTP ${del.status}），已中止上传：否则会再生成一份 cloudnav_backup(N).json，而"恢复"仍会读到旧文件`,
+              success: false,
+              status: del.status,
+            },
+            502
+          );
+        }
+      }
       fetchUrl = fileUrl;
       method = 'PUT';
       headers['Content-Type'] = 'application/json';
       requestBody = JSON.stringify(payload);
+      replacedOld = existed;
     } else if (operation === 'download') {
       fetchUrl = fileUrl;
       method = 'GET';
@@ -303,7 +330,7 @@ async function webdavPost(request, env) {
 
     // WebDAV 成功码：200 / 201 / 204 / 207
     const success = response.ok || response.status === 207;
-    return json({ success, status: response.status });
+    return json({ success, status: response.status, ...(operation === 'upload' ? { replacedOld, deletedStatus } : {}) });
   } catch (err) {
     return json({ error: err.message }, 500);
   }

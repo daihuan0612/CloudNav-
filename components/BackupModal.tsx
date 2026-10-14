@@ -73,13 +73,13 @@ const BackupModal: React.FC<BackupModalProps> = ({
   const handleBackupToCloud = async () => {
     setSyncStatus('uploading');
     setStatusMsg('正在上传...');
-    const success = await uploadBackup(config, buildBackupPayload());
-    if (success) {
+    const res = await uploadBackup(config, buildBackupPayload());
+    if (res.ok) {
         setSyncStatus('success');
-        setStatusMsg('备份成功！');
+        setStatusMsg(res.replacedOld ? '备份成功！（已覆盖旧备份）' : '备份成功！');
     } else {
         setSyncStatus('error');
-        setStatusMsg('上传失败，请检查配置或网络。');
+        setStatusMsg(res.error ? `上传失败：${res.error}` : '上传失败，请检查配置或网络。');
     }
   };
 
