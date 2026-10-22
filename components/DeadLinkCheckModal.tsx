@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X, Activity, RefreshCw, AlertTriangle,
   Trash2, Loader2
@@ -123,13 +123,23 @@ export default function DeadLinkCheckModal({
   const [filter, setFilter] = useState<'all' | Verdict>('all');
   const [error, setError] = useState('');
 
+  // 关掉弹窗就停：以前关了之后整轮探测还在后台跑（几十个请求），再打开又叠一份
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = !isOpen;
+    return () => { cancelledRef.current = true; };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const startCheck = async () => {
     if (links.length === 0) return;
     setPhase('checking');
     setError('');
-    setProgress({ done: 0, total: links.length * 2 });
+    // 进度总数 = 本地探测（每条链接一次）+ 海外探测（每个唯一 URL 一次）。
+    // 以前统一按 links.length * 2 算，URL 有重复时进度条永远走不到 100%。
+    const uniqueUrls = Array.from(new Set(links.map((l) => l.url)));
+    setProgress({ done: 0, total: links.length + uniqueUrls.length });
     const acc: Record<string, CheckResult> = {};
 
     const touch = (url: string, patch: Partial<CheckResult>) => {
@@ -141,16 +151,17 @@ export default function DeadLinkCheckModal({
     await runPool(
       links,
       async (link) => {
+        if (cancelledRef.current) return;
         const local = await checkLocal(link.url);
         touch(link.url, { local });
+        if (cancelledRef.current) return;
         setProgress((p) => ({ ...p, done: p.done + 1 }));
       },
       LOCAL_CONCURRENCY
     );
+    if (cancelledRef.current) return;
 
     // 2) Overseas probes (batched)
-    const urls = links.map((l) => l.url);
-    const uniqueUrls = Array.from(new Set(urls));
     const batches: string[][] = [];
     for (let i = 0; i < uniqueUrls.length; i += BATCH_SIZE) {
       batches.push(uniqueUrls.slice(i, i + BATCH_SIZE));
@@ -159,6 +170,7 @@ export default function DeadLinkCheckModal({
     await runPool(
       batches,
       async (batch) => {
+        if (cancelledRef.current) return;
         try {
           const remote = await checkRemoteBatch(batch, authToken);
           remote.forEach((r) => {
@@ -171,11 +183,13 @@ export default function DeadLinkCheckModal({
             setError('后端鉴权失败，请先登录（输入访问密码）后重试。');
           }
         }
+        if (cancelledRef.current) return;
         setProgress((p) => ({ ...p, done: p.done + batch.length }));
       },
       REMOTE_CONCURRENCY
     );
 
+    if (cancelledRef.current) return;
     setResults(acc);
     setPhase('done');
   };
@@ -303,7 +317,7 @@ export default function DeadLinkCheckModal({
                         className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/60"
                       >
                         <div className="relative w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
-                          <span aria-hidden="true" className="favicon-fallback-char select-none">{link.title.charAt(0)}</span>
+                          <span aria-hidden="true" className="favicon-fallback-char select-none">{(link.title || '').charAt(0)}</span>
                           <img src={getInitialIconSrc(link.url, link.icon)} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-contain" onLoad={(e) => handleIconLoad(e, link.title)} onError={(e) => handleIconError(e, link.url, link.title)} />
                         </div>
                         <div className="flex-1 min-w-0">

@@ -6,16 +6,23 @@ import { AIConfig } from "../types";
  */
 const callOpenAICompatible = async (config: AIConfig, systemPrompt: string, userPrompt: string): Promise<string> => {
     try {
-        let baseUrl = config.baseUrl.replace(/\/$/, '');
-        // If user didn't provide full path, assume /v1/chat/completions logic or just trust them
-        // Common convention: if URL ends with /v1, append /chat/completions
-        if (!baseUrl.includes('/chat/completions')) {
-            if (baseUrl.endsWith('/v1')) {
+        const raw = (config.baseUrl || '').trim().replace(/\/+$/, '');
+        if (!raw) {
+            console.error('AI baseUrl 为空：请到「设置 → AI 设置」里填 API 地址');
+            return "";
+        }
+        // 统一补成 …/chat/completions：
+        //   · 只填了域名（https://api.openai.com）→ 补 /v1/chat/completions
+        //     （以前这里补的是 /chat/completions，少一层 /v1，按占位符填法必 404）
+        //   · 已经写到 /v1、/v3 这种版本号 → 只补 /chat/completions
+        //   · 用户自己写了完整路径 → 原样使用
+        let baseUrl = raw;
+        if (!/\/chat\/completions$/i.test(baseUrl)) {
+            if (/\/v\d+$/i.test(baseUrl)) {
                 baseUrl += '/chat/completions';
+            } else if (/^https?:\/\/[^/]+$/i.test(baseUrl)) {
+                baseUrl += '/v1/chat/completions';
             } else {
-                // If it's just a domain like api.openai.com, usually implies /v1/chat/completions
-                // But let's assume user might input full path or standard base. 
-                // To be safe, let's append /chat/completions if not present
                 baseUrl += '/chat/completions';
             }
         }

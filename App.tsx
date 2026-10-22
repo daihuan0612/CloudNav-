@@ -3,8 +3,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, MoreVertical,
-  QrCode, Copy, LayoutGrid, List, Check, ExternalLink, ArrowRight, Activity
+  Pin, Settings, Lock, CloudCog,
+  QrCode, Copy, LayoutGrid, List, ArrowRight, Activity
 } from 'lucide-react';
 import { 
     LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, 
@@ -13,6 +13,7 @@ import {
 } from './types';
 import Icon from './components/Icon';
 import { handleIconError, handleIconLoad, getInitialIconSrc } from './utils/favicon';
+import { newId } from './utils/id';
 import LinkModal from './components/LinkModal';
 import AuthModal from './components/AuthModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
@@ -131,8 +132,6 @@ function App() {
       return { ...DEFAULT_SITE_SETTINGS };
   });
   
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, link: LinkItem | null } | null>(null);
   
@@ -171,6 +170,13 @@ function App() {
   const isAutoScrollingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  /* 云端写入队列（见 syncToCloud）：
+   *   syncBusyRef = 当前有没有一个 POST 正在飞；
+   *   syncPendingRef = 飞行期间攒下来的"最新一份"快照（只留最后一份，前面的直接丢掉）。
+   *   两者合起来保证：① 任何时刻最多一个 POST 在飞；② 落盘的永远是最后那次编辑。 */
+  const syncBusyRef = useRef(false);
+  const syncPendingRef = useRef<{ payload: CloudData; token: string } | null>(null);
 
   // 手机/平板没有右键 ⇒ 用"长按卡片"打开同一个菜单（见 handleCardTouchStart）
   const longPressTimer = useRef<number | null>(null);
@@ -213,7 +219,8 @@ function App() {
       ...over,
   });
 
-  const syncToCloud = async (payload: CloudData, token: string) => {
+  /** 真正发一次 POST /api/storage；返回值区分"成功 / 网络失败 / 鉴权失效" */
+  const postCloud = async (payload: CloudData, token: string): Promise<'ok' | 'fail' | 'auth'> => {
     setSyncStatus('saving');
     try {
         const response = await fetch('/api/storage', {
@@ -228,21 +235,51 @@ function App() {
         if (response.status === 401) {
             setAuthToken('');
             localStorage.removeItem(AUTH_KEY);
+            localStorage.removeItem(AUTH_EXPIRY_KEY);
             setIsAuthOpen(true);
             setSyncStatus('error');
-            return false;
+            return 'auth';
         }
 
         if (!response.ok) throw new Error('Network response was not ok');
-        
+
         setSyncStatus('saved');
         setTimeout(() => setSyncStatus('idle'), 2000);
-        return true;
+        return 'ok';
     } catch (error) {
         console.error("Sync failed", error);
         setSyncStatus('error');
-        return false;
+        return 'fail';
     }
+  };
+
+  /** 排空写入队列：一次只发一个 POST，飞行期间新来的快照只保留最新一份 */
+  const drainSyncQueue = async () => {
+      if (syncBusyRef.current) return;
+      syncBusyRef.current = true;
+      try {
+          while (syncPendingRef.current) {
+              const job = syncPendingRef.current;
+              syncPendingRef.current = null;
+              const result = await postCloud(job.payload, job.token);
+              if (result === 'auth') {
+                  // 密码已失效：剩下的快照别再发了，等重新解锁后由 initData 重新拉取
+                  syncPendingRef.current = null;
+                  break;
+              }
+          }
+      } finally {
+          syncBusyRef.current = false;
+      }
+  };
+
+  /** 对外统一入口：登记"最新一份快照"再排队。
+   *  以前这里是直接 await fetch —— 拖拽排序（一秒几十次 updateData）、批量补描述那种场景
+   *  会打出一串并发 POST，而且后发的**旧**快照可能盖掉先发的**新**快照（云端丢更新）。 */
+  const syncToCloud = async (payload: CloudData, token: string) => {
+      syncPendingRef.current = { payload, token };
+      await drainSyncQueue();
+      return true;
   };
 
   /** 把远端（云端 KV 或 WebDAV 备份文件）里的「配置类」数据合并进当前状态。
@@ -419,9 +456,19 @@ function App() {
       } catch (e) {}
   }, [siteSettings]);
 
+  /* 关页面前把队列里还没发出去的那份推上去：否则"改完立刻关标签页"会丢掉最后一次修改。
+     只是尽力而为（浏览器不保证 pagehide 里的请求一定发完），但比什么都不做强。 */
+  useEffect(() => {
+      const flush = () => {
+          if (syncPendingRef.current) drainSyncQueue();
+      };
+      window.addEventListener('pagehide', flush);
+      return () => window.removeEventListener('pagehide', flush);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
       const handleClickOutside = (e: MouseEvent) => {
-          if (openMenuId) setOpenMenuId(null);
           if (contextMenu && contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
              setContextMenu(null);
           }
@@ -447,7 +494,7 @@ function App() {
           window.removeEventListener('scroll', handleScroll, true);
           window.removeEventListener('contextmenu', handleGlobalContextMenu);
       }
-  }, [openMenuId, contextMenu]);
+  }, [contextMenu]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -549,7 +596,7 @@ function App() {
     if (!authToken) { setIsAuthOpen(true); return; }
     const newLink: LinkItem = {
       ...data,
-      id: Date.now().toString(),
+      id: newId(),
       createdAt: Date.now()
     };
     updateData([newLink, ...links], categories);
@@ -624,13 +671,15 @@ function App() {
 
   const handleDeleteCategory = (catId: string) => {
       if (!authToken) { setIsAuthOpen(true); return; }
-      const newCats = categories.filter(c => c.id !== catId);
-      const targetId = 'common'; 
-      const newLinks = links.map(l => l.categoryId === catId ? { ...l, categoryId: targetId } : l);
+      const remaining = categories.filter(c => c.id !== catId);
       // 防护：分类被删空时补一个兜底分类（DEFAULT_CATEGORIES 若被清空也不能崩）
-      if (newCats.length === 0) {
-          newCats.push(DEFAULT_CATEGORIES[0] || { id: 'common', name: '常用推荐', icon: 'Star' });
-      }
+      const newCats = remaining.length > 0
+          ? remaining
+          : [DEFAULT_CATEGORIES[0] || { id: 'common', name: '常用推荐', icon: 'Star' }];
+      // 书签绝不能指向一个已经删掉的分类（否则界面上直接看不见了）：
+      // 优先落到仍然存在的 'common'，没有就落到第一个分类
+      const targetId = newCats.find(c => c.id === 'common')?.id || newCats[0].id;
+      const newLinks = links.map(l => l.categoryId === catId ? { ...l, categoryId: targetId } : l);
       updateData(newLinks, newCats);
   };
 
@@ -667,7 +716,8 @@ function App() {
       if (searchMode === 'external') {
           const engine = externalEngines.find(e => e.id === activeEngineId) || externalEngines[0];
           if (engine) {
-              window.open(engine.url + encodeURIComponent(searchQuery), '_blank');
+              // noopener/noreferrer：别让被打开的页面拿到 window.opener 反向控制本站
+              window.open(engine.url + encodeURIComponent(searchQuery), '_blank', 'noopener,noreferrer');
               setSearchQuery('');
           }
       }
@@ -731,8 +781,11 @@ function App() {
       const reordered = [...links];
       const fromIdx = reordered.findIndex(l => l.id === sourceId);
       const toIdx = reordered.findIndex(l => l.id === targetLinkId);
+      // 找不到就撤：以前不判 -1，splice(-1, 1) 会把数组最后一条删掉
+      if (fromIdx === -1 || toIdx === -1) return;
       reordered.splice(fromIdx, 1);
-      reordered.splice(toIdx, 0, source);
+      // 往下拖时，删掉源之后目标的下标会前移一位；不补这一位就会落到目标的**下一条**去
+      reordered.splice(fromIdx < toIdx ? toIdx - 1 : toIdx, 0, source);
       updateData(reordered, categories);
   };
 
@@ -764,6 +817,14 @@ function App() {
   const activeExternalEngine = useMemo(() => {
       return externalEngines.find(e => e.id === activeEngineId) || externalEngines[0];
   }, [externalEngines, activeEngineId]);
+
+  /** 分类已被删掉、书签却还留着那个 categoryId 的"孤儿"（历史数据、导入兜底、插件写入都可能出现）。
+   *  以前渲染层只遍历 categories，这些书签等于凭空消失（数据还在云端，界面上就是看不见）。
+   *  这里把它们归到「未分类」，保证任何一条书签都看得见。 */
+  const orphanLinks = useMemo(() => {
+      const catIds = new Set(categories.map(c => c.id));
+      return searchResults.filter(l => !catIds.has(l.categoryId));
+  }, [searchResults, categories]);
 
   // --- Render Components ---
 
@@ -891,7 +952,7 @@ function App() {
       const startSrc = getInitialIconSrc(link.url, link.icon);
       const iconDisplay = (
           <>
-              <span aria-hidden="true" className="favicon-fallback-char select-none">{link.title.charAt(0)}</span>
+              <span aria-hidden="true" className="favicon-fallback-char select-none">{(link.title || '').charAt(0)}</span>
               {startSrc && (
                  <img
                     src={startSrc}
@@ -1353,6 +1414,23 @@ function App() {
                 );
             })}
             
+            {/* 孤儿书签（分类已不存在）：单独一块，避免数据"看不见" */}
+            {orphanLinks.length > 0 && (
+                <section id="cat-__orphan" className="scroll-mt-24">
+                    <div className="flex items-center gap-3 mb-4 pb-2 border-b border-slate-200/50 dark:border-slate-800">
+                        <span className="cat-bar"></span>
+                        <div className="text-slate-400">
+                            <Icon name="Folder" size={20} />
+                        </div>
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200">未分类</h2>
+                        <span className="text-xs text-slate-400">{orphanLinks.length} 个</span>
+                    </div>
+                    <div className={cardGridClass}>
+                        {orphanLinks.map(link => renderLinkCard(link))}
+                    </div>
+                </section>
+            )}
+
             {/* Empty State for Local Search */}
             {searchQuery && searchMode === 'local' && searchResults.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -1372,7 +1450,8 @@ function App() {
         onSave={editingLink ? handleEditLink : handleAddLink}
         categories={categories}
         existingLinks={links}
-        initialData={editingLink || (prefillLink as LinkItem)}
+        initialData={editingLink}
+        prefillData={prefillLink}
         aiConfig={aiConfig}
       />
     </div>

@@ -12,10 +12,13 @@ interface LinkModalProps {
   categories: Category[];
   existingLinks?: LinkItem[];
   initialData?: LinkItem;
+  /** 预填值（浏览器插件「一键保存」/ ?add_url= 用）：只填内容，**仍然是新增模式**。
+   *  以前把它塞进 initialData 里传，于是弹窗标题写着"编辑链接"、还跳过了查重。 */
+  prefillData?: Partial<LinkItem>;
   aiConfig: AIConfig;
 }
 
-const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, categories, existingLinks, initialData, aiConfig }) => {
+const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, categories, existingLinks, initialData, prefillData, aiConfig }) => {
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [iconUrl, setIconUrl] = useState('');
@@ -41,17 +44,18 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, categori
         // Default to true even for edits, allowing user to opt-out manually
         setAutoFetchIcon(true);
       } else {
-        setTitle('');
-        setUrl('');
-        setIconUrl('');
-        setDescription('');
-        setCategoryId(categories[0]?.id || 'common');
+        // 预填（插件 / ?add_url= 走这条）：只把值填进去，仍然是"新增"模式
+        setTitle(prefillData?.title || '');
+        setUrl(prefillData?.url || '');
+        setIconUrl(prefillData?.icon || '');
+        setDescription(prefillData?.description || '');
+        setCategoryId(prefillData?.categoryId || categories[0]?.id || 'common');
         setPinned(false);
         setAutoFetchIcon(true);
       }
       setDuplicateWarning('');
     }
-  }, [isOpen, initialData, categories]);
+  }, [isOpen, initialData, prefillData, categories]);
 
   // Logic to fetch icon
   const fetchIconFromUrl = (targetUrl: string) => {
@@ -120,7 +124,12 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, categori
         const [desc, cat] = await Promise.all([descPromise, catPromise]);
         
         if (desc) setDescription(desc);
-        if (cat) setCategoryId(cat);
+        // AI 返回的可能是带引号/空白的 id，也可能是分类名、甚至它自己编的 id。
+        // 以前不做校验直接 setCategoryId → 存进一个不存在的分类，书签在界面上就"消失"了。
+        const cleanCat = (cat || '').replace(/^[\s'"`]+|[\s'"`]+$/g, '');
+        if (cleanCat && categories.some(c => c.id === cleanCat)) {
+            setCategoryId(cleanCat);
+        }
     } catch (e) {
         console.error("AI Assist failed", e);
     } finally {
@@ -189,7 +198,10 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, categori
                          <img 
                             src={iconUrl} 
                             className="w-full h-full object-contain"
-                            onError={(e) => {e.currentTarget.style.display='none'}}
+                            // 用 visibility 而不是 display：以前一旦某张图加载失败就把 display 设成 none，
+                            // 之后改成正确的图标地址预览也永远是空的（内联样式 React 不会帮你恢复）
+                            onError={(e) => {e.currentTarget.style.visibility='hidden'}}
+                            onLoad={(e) => {e.currentTarget.style.visibility='visible'}}
                          />
                     ) : (
                         <ImageIcon size={18} className="text-slate-400"/>

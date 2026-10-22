@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { X, ArrowUp, ArrowDown, Trash2, Edit2, Plus, Check, Lock, Merge, Smile } from 'lucide-react';
 import { Category, LinkItem } from '../types';
 import Icon from './Icon';
+import { newId } from '../utils/id';
 
 interface CategoryManagerModalProps {
   isOpen: boolean;
@@ -93,7 +94,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const handleAdd = () => {
     if (!newCatName.trim()) return;
     const newCat: Category = {
-      id: Date.now().toString(),
+      id: newId(),
       name: newCatName.trim(),
       icon: newCatIcon.trim() || 'Folder',
       password: newCatPassword.trim() || undefined
@@ -192,7 +193,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                           <div className="flex items-center gap-2">
                               <Lock size={14} className="text-slate-400" />
                               <input 
-                                type="text" 
+                                type="password" 
                                 value={editPassword}
                                 onChange={(e) => setEditPassword(e.target.value)}
                                 className="flex-1 p-1.5 px-2 text-xs rounded border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white outline-none"
@@ -244,7 +245,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             <Merge size={14} />
                         </button>
                         <button 
-                        onClick={() => { if(confirm(`确定删除"${cat.name}"分类吗？该分类下的书签将移动到"常用推荐"。`)) onDeleteCategory(cat.id); }}
+                        onClick={() => { if(confirm(`确定删除"${cat.name}"分类吗？该分类下的书签会移动到仍然存在的分类（优先"常用推荐"）。`)) onDeleteCategory(cat.id); }}
                         className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
                         title="删除"
                         >
@@ -293,7 +294,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                  <div className="flex-1 relative">
                     <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input 
-                        type="text"
+                        type="password"
                         value={newCatPassword}
                         onChange={(e) => setNewCatPassword(e.target.value)}
                         placeholder="密码 (可选)"

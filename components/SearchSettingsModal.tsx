@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { X, Search, Plus, Trash2, Check, Globe, Wand2 } from 'lucide-react';
 import { SearchEngine } from '../types';
 import { getFaviconUrl, handleIconError } from '../utils/favicon';
+import { newId } from '../utils/id';
 
 interface SearchSettingsModalProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ const SearchSettingsModal: React.FC<SearchSettingsModalProps> = ({
     }
 
     const newEngine: SearchEngine = {
-      id: Date.now().toString(),
+      id: newId(),
       name: newName,
       url: formattedUrl,
       icon: newIcon || 'Globe' // Default to Globe icon if empty
@@ -69,14 +70,10 @@ const SearchSettingsModal: React.FC<SearchSettingsModalProps> = ({
             normalizedUrl = 'https://' + targetUrl;
         }
         
-        // 尝试解析域名
-        const urlObj = new URL(normalizedUrl);
-        const origin = urlObj.origin;
-        
-        // 使用 Google 的 favicon 服务获取图标
-        const newIconUrl = getFaviconUrl(normalizedUrl);
-        
-        setNewIcon(newIconUrl);
+        // 只借 URL 解析做一次合法性校验（非法地址直接放弃）；
+        // 图标取站点自己的 /favicon.ico，不经过任何第三方服务
+        new URL(normalizedUrl);
+        setNewIcon(getFaviconUrl(normalizedUrl));
       } catch (e) {
           // invalid url
       }

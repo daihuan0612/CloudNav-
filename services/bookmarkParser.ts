@@ -1,5 +1,6 @@
 import { LinkItem, Category } from '../types';
-import { v4 as uuidv4 } from 'uuid'; // Assuming uuid is available or we use a simple generator
+
+// 导入时给每条书签/每个分类生成 id（同毫秒内连续生成也不能撞，所以带随机段）
 
 // Simple UUID generator fallback
 const generateId = () => {

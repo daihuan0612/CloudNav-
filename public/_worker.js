@@ -35,11 +35,25 @@ const preflight = () => new Response(null, { status: 204, headers: CORS });
 
 const unauthorized = () => json({ error: 'Unauthorized' }, 401);
 
+/** 恒定时间比较：不要用 === 逐字符比密码（长度/前缀会被时序侧信道探出来） */
+const safeEqual = (a, b) => {
+  const x = String(a == null ? '' : a);
+  const y = String(b == null ? '' : b);
+  // 任何一边是空串都不算通过（空密码 / 少传请求头一律拒绝）
+  if (!x || !y) return false;
+  let diff = x.length ^ y.length;
+  const len = Math.max(x.length, y.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+};
+
 /** 校验访问密码；未配置 PASSWORD 时同样视为不通过 */
 const authPass = (request, env) => {
   const expected = env.PASSWORD;
   if (!expected) return false;
-  return request.headers.get('x-auth-password') === expected;
+  return safeEqual(request.headers.get('x-auth-password'), expected);
 };
 
 /* ----------------------------- /api/verify ----------------------------- */
@@ -47,7 +61,7 @@ const authPass = (request, env) => {
 async function apiVerify(request, env) {
   try {
     const body = await request.json();
-    const ok = !!env.PASSWORD && body.password === env.PASSWORD;
+    const ok = !!env.PASSWORD && safeEqual(body.password, env.PASSWORD);
     return json({ success: ok }, ok ? 200 : 401);
   } catch (err) {
     return json({ error: 'Bad request' }, 400);
@@ -98,6 +112,11 @@ async function linkPost(request, env) {
     const currentDataStr = await env.CLOUDNAV_KV.get('app_data');
     let currentData = { links: [], categories: [] };
     if (currentDataStr) currentData = JSON.parse(currentDataStr);
+    // KV 里的数据被手改过 / 是很老的格式：这里必须自己兜住，
+    // 否则下面的 .find 会直接抛异常，插件那边只看到 500
+    if (!currentData || typeof currentData !== 'object' || Array.isArray(currentData)) currentData = {};
+    if (!Array.isArray(currentData.links)) currentData.links = [];
+    if (!Array.isArray(currentData.categories)) currentData.categories = [];
 
     let targetCatId = '';
     let targetCatName = '';
@@ -139,7 +158,10 @@ async function linkPost(request, env) {
     }
 
     const newLink = {
-      id: Date.now().toString(),
+      // 同一毫秒连存两条（右键连点、脚本批量）时，纯时间戳 id 会撞车 → 优先用 randomUUID
+      id: (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
+        : Date.now().toString(),
       title: newLinkData.title,
       url: newLinkData.url,
       description: newLinkData.description || '',
@@ -174,6 +196,26 @@ function isBlockedUrl(raw) {
     return 'protocol not allowed';
   }
   const host = url.hostname.toLowerCase();
+
+  // IPv6：URL 解析出来的 hostname 是带方括号的（'[::1]'），以前拿它跟 '::1' 比永远不相等，
+  // 于是 http://[::1]/ 这类地址能绕过内网拦截。这里先剥括号再判断。
+  if (host.startsWith('[') || host.includes(':')) {
+    const v6 = host.replace(/^\[/, '').replace(/\]$/, '');
+    if (v6 === '::1' || v6 === '::' || v6 === '0:0:0:0:0:0:0:1') return 'local host';
+    if (/^f[cd][0-9a-f]{2}:/.test(v6)) return 'private/internal ip';   // fc00::/7 ULA
+    if (/^fe[89ab][0-9a-f]:/.test(v6)) return 'link-local ip';         // fe80::/10
+    // IPv4-mapped：::ffff:127.0.0.1 或 ::ffff:7f00:1
+    const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isBlockedUrl(`http://${mapped[1]}/`);
+    const mappedHex = v6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mappedHex) {
+      const hi = parseInt(mappedHex[1], 16);
+      const lo = parseInt(mappedHex[2], 16);
+      return isBlockedUrl(`http://${[hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')}/`);
+    }
+    return '';
+  }
+
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     const parts = host.split('.').map(Number);
     const a = parts[0];
@@ -184,11 +226,13 @@ function isBlockedUrl(raw) {
       (a === 169 && parts[1] === 254) ||
       (a === 172 && parts[1] >= 16 && parts[1] <= 31) ||
       (a === 192 && parts[1] === 168) ||
+      (a === 100 && parts[1] >= 64 && parts[1] <= 127) ||   // 100.64/10 运营商级 NAT
+      (a === 198 && (parts[1] === 18 || parts[1] === 19)) || // 198.18/15 基准测试网段
       a >= 224
     ) {
       return 'private/internal ip';
     }
-  } else if (host === 'localhost' || host === '::1' || host === '0.0.0.0') {
+  } else if (host === 'localhost' || host === '0.0.0.0') {
     return 'local host';
   }
   return '';
@@ -249,6 +293,16 @@ async function checkPost(request, env) {
 
 /* ----------------------------- /api/webdav ----------------------------- */
 /* WebDAV 备份代理（需鉴权）：body { operation, config, payload } */
+
+/** Basic 认证头：btoa 只吃 Latin-1，用户名/密码里只要有一个中文（或 emoji）就直接抛异常，
+ *  以前整个请求会 500，前端只看到一句"上传失败"。这里先按 UTF-8 转成字节再 base64。 */
+const base64Utf8 = (text) => {
+  const bytes = new TextEncoder().encode(String(text == null ? '' : text));
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+};
+
 async function webdavPost(request, env) {
   if (!authPass(request, env)) return unauthorized();
   try {
@@ -264,7 +318,7 @@ async function webdavPost(request, env) {
     if (!baseUrl.endsWith('/')) baseUrl += '/';
     const fileUrl = baseUrl + 'cloudnav_backup.json';
 
-    const authHeader = `Basic ${btoa(`${config.username}:${config.password}`)}`;
+    const authHeader = `Basic ${base64Utf8(`${config.username}:${config.password}`)}`;
 
     let fetchUrl = baseUrl;
     let method = 'PROPFIND';

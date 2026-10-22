@@ -60,7 +60,8 @@ const ImportModal: React.FC<ImportModalProps> = ({
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
+    const input = e.target;
+    const selectedFile = input.files?.[0];
     if (!selectedFile) return;
     
     setFile(selectedFile);
@@ -98,6 +99,8 @@ const ImportModal: React.FC<ImportModalProps> = ({
         console.error(error);
     } finally {
         setAnalyzing(false);
+        // 清空 input 的值：否则"重新选择"再挑**同一个文件**不会触发 onChange（浏览器认为没变化）
+        input.value = '';
     }
   };
 
@@ -317,13 +320,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 <button onClick={handleClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">取消</button>
             ) : (
                 <>
-                    <button onClick={resetState} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">重新选择</button>
+                    <button onClick={resetState} disabled={importing} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">重新选择</button>
                     <button 
                         onClick={executeImport} 
-                        disabled={newLinksCount === 0}
+                        disabled={newLinksCount === 0 || importing}
                         className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 font-medium"
                     >
-                        <Check size={16} /> 确认导入 ({newLinksCount})
+                        <Check size={16} /> {importing ? '导入中...' : `确认导入 (${newLinksCount})`}
                     </button>
                 </>
             )}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
+import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu, Eye, EyeOff } from 'lucide-react';
 import { AIConfig, LinkItem, Category, SiteSettings, DEFAULT_SITE_TITLE } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
 import { handleIconError, handleIconLoad, getInitialIconSrc } from '../utils/favicon';
@@ -52,6 +52,16 @@ const generateSvgIcon = (text: string, color1: string, color2: string) => {
     }
 };
 
+/**
+ * 把任意字符串变成一个合法的 JS 字符串字面量（含引号）。
+ *
+ * 为什么必须这么做：下面生成的 background.js / sidebar.js 是靠模板字符串拼出来的，
+ * 站名、域名、**访问密码**都会被直接插进代码里。密码里只要有一个 `"` 或反斜杠，
+ * 生成出来的插件就是语法错误（装不上）；更糟的是可以被拼成额外语句。
+ * 用 JSON.stringify 一次性解决转义 + 包裹引号。
+ */
+const jsLiteral = (value: string): string => JSON.stringify(value ?? '');
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
     isOpen, onClose, config, siteSettings, onSave, links, categories, onUpdateLinks 
 }) => {
@@ -73,6 +83,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Tools State
   const [password, setPassword] = useState('');
+  /** 访问密码默认按星号显示；要看明文得主动点一下眼睛（每次打开设置都复位） */
+  const [showPassword, setShowPassword] = useState(false);
   const [domain, setDomain] = useState('');
   const [browserType, setBrowserType] = useState<'chrome' | 'firefox'>('chrome');
   const [isZipping, setIsZipping] = useState(false);
@@ -81,11 +93,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   
-  const availableCategories = useMemo(() => {
-      const catIds = Array.from(new Set(links.map(l => l.categoryId)));
-      return catIds;
-  }, [links]);
-
   const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({});
 
   const updateGeneratedIcons = (text: string) => {
@@ -120,6 +127,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setDomain(window.location.origin);
       const storedToken = localStorage.getItem('cloudnav_auth_token');
       if (storedToken) setPassword(storedToken);
+      setShowPassword(false); // 每次打开设置都回到星号状态
       setDraggedId(null);
       setFilterCategory('all');
     }
@@ -274,11 +282,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const extBackgroundJs = `// background.js - ${localSiteSettings.navTitle || DEFAULT_SITE_TITLE} Assistant v7.6
-// 内置配置
+// 内置配置（注意：这个文件里带着你的访问密码，别把生成的 zip 公开分享）
 const CONFIG = {
-  name: "${localSiteSettings.navTitle || DEFAULT_SITE_TITLE}",
-  apiBase: "${domain}",
-  password: "${password}"
+  name: ${jsLiteral(localSiteSettings.navTitle || DEFAULT_SITE_TITLE)},
+  apiBase: ${jsLiteral(domain)},
+  password: ${jsLiteral(password)}
 };
 
 // 缓存数据
@@ -580,9 +588,10 @@ function notify(title, message) {
 </body>
 </html>`;
 
-  const extSidebarJs = `const CONFIG = {
-  apiBase: "${domain}",
-  password: "${password}"
+  const extSidebarJs = `// 注意：这个文件里带着你的访问密码，别把生成的 zip 公开分享
+const CONFIG = {
+  apiBase: ${jsLiteral(domain)},
+  password: ${jsLiteral(password)}
 };
 const CACHE_KEY = 'cloudnav_data';
 
@@ -1010,7 +1019,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     className="w-full pl-10 p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                                 />
                             </div>
-                            <p className="text-xs text-slate-500 mt-1">Key 仅存储在本地浏览器缓存中，不会发送到我们的服务器。</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Key 会随书签数据一起同步到你自己部署的 KV（以及你手动上传的 WebDAV 备份文件），
+                                不会发给任何第三方；但同一个密码登录的设备都能看到它，请勿在公共电脑上填写。
+                            </p>
                         </div>
 
                         {localConfig.provider === 'openai' && (
@@ -1098,7 +1110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             <GripVertical size={16} />
                                         </div>
                                         <div className="relative w-6 h-6 rounded bg-slate-100 dark:bg-slate-600 flex items-center justify-center text-xs overflow-hidden">
-                                            <span aria-hidden="true" className="favicon-fallback-char select-none">{link.title.charAt(0)}</span>
+                                            <span aria-hidden="true" className="favicon-fallback-char select-none">{(link.title || '').charAt(0)}</span>
                                             <img src={getInitialIconSrc(link.url, link.icon)} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" onLoad={(e) => handleIconLoad(e, link.title)} onError={(e) => handleIconError(e, link.url, link.title)} />
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -1137,17 +1149,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         <label className="text-xs text-slate-500 mb-1 block">访问密码 (Password)</label>
                                         <div className="flex gap-2">
                                             <input 
-                                                type="text" 
+                                                type={showPassword ? 'text' : 'password'} 
                                                 value={password} 
                                                 readOnly 
                                                 className="flex-1 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm outline-none font-mono"
                                                 placeholder="未登录 / 未设置"
+                                                autoComplete="off"
+                                                spellCheck={false}
                                             />
-                                             <button onClick={() => handleCopy(password, 'pwd')} className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-blue-500 rounded text-slate-600 dark:text-slate-400 transition-colors">
+                                            <button
+                                                onClick={() => setShowPassword(v => !v)}
+                                                title={showPassword ? '隐藏密码' : '显示明文（确认用，看完记得再点一下）'}
+                                                aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                                                className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-blue-500 rounded text-slate-600 dark:text-slate-400 transition-colors"
+                                            >
+                                                {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+                                            </button>
+                                             <button onClick={() => handleCopy(password, 'pwd')} title="复制密码" className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-blue-500 rounded text-slate-600 dark:text-slate-400 transition-colors">
                                                 {copiedStates['pwd'] ? <Check size={16}/> : <Copy size={16}/>}
                                             </button>
                                         </div>
-                                        <p className="text-[10px] text-slate-400 mt-1">此密码对应您部署时设置的 PASSWORD 环境变量。</p>
+                                        <p className="text-[10px] text-slate-400 mt-1">此密码对应您部署时设置的 PASSWORD 环境变量。默认以星号显示，需要核对时点眼睛图标。</p>
                                      </div>
                                 </div>
                             </div>
@@ -1191,7 +1213,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     <li><strong>[重要]</strong> 将下方图标保存为 <code className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-xs">icon.png</code>。</li>
                                     <li>获取插件代码文件：
                                         <ul className="list-disc list-inside ml-4 mt-1 space-y-1 text-slate-500">
-                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"📦 一键下载{localSiteSettings.navTitle || DEFAULT_SITE_TITLE}Pro-浏览器插件"</span> 按钮，解压到该文件夹。</li>
+                                            <li><strong>方式一 (推荐)：</strong>点击下方的 <span className="text-blue-600 dark:text-blue-400 font-bold">"一键下载{localSiteSettings.navTitle || DEFAULT_SITE_TITLE}Pro-浏览器插件"</span> 按钮，解压到该文件夹。</li>
                                             <li><strong>方式二 (备用)：</strong>分别点击下方代码块的 <Download size={12} className="inline"/> 按钮下载或复制 <code className="bg-white dark:bg-slate-900 px-1 rounded">manifest.json</code>, <code className="bg-white dark:bg-slate-900 px-1 rounded">background.js</code> 等文件到该文件夹。</li>
                                         </ul>
                                     </li>
@@ -1217,8 +1239,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-blue-500/20"
                                     >
                                         <Package size={20} />
-                                        {isZipping ? '打包中...' : `📦 一键下载${localSiteSettings.navTitle || DEFAULT_SITE_TITLE}Pro-浏览器插件`}
+                                        {isZipping ? '打包中...' : `一键下载${localSiteSettings.navTitle || DEFAULT_SITE_TITLE}Pro-浏览器插件`}
                                     </button>
+                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 leading-relaxed">
+                                        注意：生成的 zip 里写着你当前的访问密码（插件要靠它调用接口），
+                                        只在自己电脑上安装，别发给别人或传到网盘。
+                                    </p>
                                 </div>
                                 
                                 <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 rounded border border-green-200 dark:border-green-900/50 text-sm space-y-2">
@@ -1253,6 +1279,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200 pt-2 border-t border-slate-100 dark:border-slate-700">
                                     <Sidebar size={18} className="text-purple-500"/> 核心配置
                                 </div>
+                                <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed">
+                                    下面的代码里写着你的访问密码（插件要靠它调接口），所以既不能公开分享，也不要截图外传；
+                                    平时核对密码用上面那个眼睛按钮就够了。
+                                </p>
                                 {renderCodeBlock('manifest.json', getManifestJson())}
                                 {renderCodeBlock('background.js', extBackgroundJs)}
                                 

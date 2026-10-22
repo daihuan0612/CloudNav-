@@ -43,8 +43,9 @@ export const generateBookmarkHtml = (links: LinkItem[], categories: Category[]):
     
     catLinks.forEach(link => {
       const date = Math.floor(link.createdAt / 1000);
-      const iconAttr = link.icon ? ` ICON="${link.icon}"` : '';
-      html += `        <DT><A HREF="${link.url}" ADD_DATE="${date}"${iconAttr}>${escapeHtml(link.title)}</A>\n`;
+      // 属性值也必须转义：URL 里带一个 " 就能把整条 A 标签截断，导出的文件直接坏掉
+      const iconAttr = link.icon ? ` ICON="${escapeHtml(link.icon)}"` : '';
+      html += `        <DT><A HREF="${escapeHtml(link.url)}" ADD_DATE="${date}"${iconAttr}>${escapeHtml(link.title)}</A>\n`;
       // 备注写入 <DD> 节点，保证重新导入时描述不丢失（Chrome/Edge/Firefox 书签格式标准）
       if (link.description && link.description.trim()) {
         html += `        <DD>${escapeHtml(link.description.trim())}</DD>\n`;
@@ -63,7 +64,8 @@ export const generateBookmarkHtml = (links: LinkItem[], categories: Category[]):
     html += `    <DL><p>\n`;
     uncategorized.forEach(link => {
         const date = Math.floor(link.createdAt / 1000);
-        html += `        <DT><A HREF="${link.url}" ADD_DATE="${date}">${escapeHtml(link.title)}</A>\n`;
+        const iconAttr = link.icon ? ` ICON="${escapeHtml(link.icon)}"` : '';
+        html += `        <DT><A HREF="${escapeHtml(link.url)}" ADD_DATE="${date}"${iconAttr}>${escapeHtml(link.title)}</A>\n`;
         if (link.description && link.description.trim()) {
             html += `        <DD>${escapeHtml(link.description.trim())}</DD>\n`;
         }
