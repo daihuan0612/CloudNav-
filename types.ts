@@ -25,9 +25,9 @@ export interface SiteSettings {
 }
 
 /** 站点默认名称 —— 唯一出处，全站所有兜底值都引用它，不再散落硬编码。
- *  这是中性占位名：部署者在「设置 → 网站设置」里改成自己的名字后，全站（含浏览器标签页、
- *  侧边栏、生成的浏览器插件）都会跟着变。 */
-export const DEFAULT_SITE_TITLE = '我的导航';
+ *  部署者在「设置 → 网站设置」里改成自己的名字后，全站（含浏览器标签页、解锁界面、
+ *  侧边栏、生成的浏览器插件）都会跟着变；这里的默认值只在"从来没设置过"时出现。 */
+export const DEFAULT_SITE_TITLE = '小苹果导航';
 
 /** 站点展示设置的本地缓存键：index.html 用它提前应用标题，避免解锁前显示默认名 */
 export const SITE_SETTINGS_KEY = 'cloudnav_site_settings';

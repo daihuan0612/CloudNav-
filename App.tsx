@@ -1026,6 +1026,7 @@ function App() {
   if (!authToken) {
     return (
       <UnlockScreen
+        siteTitle={siteSettings.navTitle || siteSettings.title}
         onUnlocked={(pwd) => {
           setAuthToken(pwd);
           localStorage.setItem(AUTH_KEY, pwd);

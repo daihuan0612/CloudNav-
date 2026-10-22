@@ -1,18 +1,24 @@
 import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { DEFAULT_SITE_TITLE } from '../types';
 
 interface UnlockScreenProps {
   onUnlocked: (password: string) => void;
+  /** 站点名：来自设置里的「导航栏标题」。解锁前读不到云端数据，只能用本地缓存（App 传进来）。 */
+  siteTitle?: string;
 }
 
 /**
- * 极简解锁界面：仅密码框 + 解锁按钮。
+ * 解锁界面：站点名 + 密码框 + 解锁按钮。
+ * 站点名跟着「设置 → 网站设置 → 导航栏标题」走；从来没设置过时用 DEFAULT_SITE_TITLE。
  * 密码通过 /api/verify 校验（与后端 PASSWORD 比对）。
  */
-export default function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
+export default function UnlockScreen({ onUnlocked, siteTitle }: UnlockScreenProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const title = (siteTitle || '').trim() || DEFAULT_SITE_TITLE;
 
   const submit = async () => {
     if (!password || loading) return;
@@ -39,6 +45,12 @@ export default function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-900">
       <div className="w-full max-w-[320px]">
+        <div className="mb-7 text-center">
+          <h1 className="text-[22px] font-bold tracking-tight leading-snug break-words text-slate-800 dark:text-slate-100">
+            {title}
+          </h1>
+          <div className="mx-auto mt-3 h-[3px] w-10 rounded-full bg-gradient-to-r from-blue-500 to-violet-500" />
+        </div>
         <input
           type="password"
           value={password}
