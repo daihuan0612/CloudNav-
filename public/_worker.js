@@ -326,6 +326,9 @@ async function webdavPost(request, env) {
     let requestBody;
     let replacedOld = false; // 上传时是否真的覆盖掉了旧备份（给前端/排查用）
     let deletedStatus = null; // 覆盖时那次 DELETE 的返回码（排查用：204=真删掉了）
+    let oldBackupText = null; // 删旧文件前先留一份原文，PUT 失败时用来回滚
+    let rollbackStatus = null; // 回滚那次 PUT 的返回码（排查用）
+    let rollbackOk = false; // 回滚是否成功
 
     if (operation === 'check') {
       fetchUrl = baseUrl;
@@ -341,6 +344,16 @@ async function webdavPost(request, env) {
       const existed = probe.status === 207;
       if (probe.body) await probe.body.cancel().catch(() => {});
       if (existed) {
+        // 先留一份旧备份原文：DELETE 成功、PUT 失败的话，唯一的站外备份就没了
+        // （图床 PUT 不做覆盖，所以不能"先传新的再删旧的"，只能"取旧 → 删 → 传新的 → 失败则写回旧的"）。
+        try {
+          const oldRes = await fetch(fileUrl, { method: 'GET', headers });
+          if (oldRes.ok) oldBackupText = await oldRes.text();
+          else if (oldRes.body) await oldRes.body.cancel().catch(() => {});
+        } catch (e) {
+          // 取不到就算了：至少不让上传因为"读不到旧文件"而失败
+          oldBackupText = null;
+        }
         const del = await fetch(fileUrl, { method: 'DELETE', headers });
         if (del.body) await del.body.cancel().catch(() => {});
         deletedStatus = del.status;
@@ -384,7 +397,30 @@ async function webdavPost(request, env) {
 
     // WebDAV 成功码：200 / 201 / 204 / 207
     const success = response.ok || response.status === 207;
-    return json({ success, status: response.status, ...(operation === 'upload' ? { replacedOld, deletedStatus } : {}) });
+
+    // 上传失败、而旧备份已经被删掉 ⇒ 立刻把旧内容写回去。
+    // 否则"唯一的站外备份"就没了，而前端只会显示一句"上传失败"。
+    if (!success && operation === 'upload' && replacedOld && oldBackupText) {
+      if (response.body) await response.body.cancel().catch(() => {});
+      try {
+        const rb = await fetch(fileUrl, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: oldBackupText,
+        });
+        rollbackStatus = rb.status;
+        rollbackOk = rb.ok || rb.status === 207;
+        if (rb.body) await rb.body.cancel().catch(() => {});
+      } catch (e) {
+        rollbackOk = false;
+      }
+    }
+
+    return json({
+      success,
+      status: response.status,
+      ...(operation === 'upload' ? { replacedOld, deletedStatus, rollbackStatus, rollbackOk } : {}),
+    });
   } catch (err) {
     return json({ error: err.message }, 500);
   }

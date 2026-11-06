@@ -91,6 +91,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   
   // Link Management State
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  /** 拖拽过程中的"草稿顺序"：只影响界面显示，松手才提交一次（见 commitDraftOrder） */
+  const [draftOrder, setDraftOrder] = useState<LinkItem[] | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   
   const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({});
@@ -129,6 +131,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       if (storedToken) setPassword(storedToken);
       setShowPassword(false); // 每次打开设置都回到星号状态
       setDraggedId(null);
+      setDraftOrder(null);
       setFilterCategory('all');
     }
   }, [isOpen, config, siteSettings]);
@@ -168,6 +171,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setProgress({ current: 0, total: missingLinks.length });
     
     let currentLinks = [...links];
+    let changed = false;
 
     for (let i = 0; i < missingLinks.length; i++) {
         if (shouldStopRef.current) break;
@@ -176,13 +180,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         try {
             const desc = await generateLinkDescription(link.title, link.url, localConfig);
             currentLinks = currentLinks.map(l => l.id === link.id ? { ...l, description: desc } : l);
-            onUpdateLinks(currentLinks);
+            changed = true;
             setProgress({ current: i + 1, total: missingLinks.length });
         } catch (e) {
             console.error(`Failed to generate for ${link.title}`, e);
         }
     }
 
+    // 【注意】以前这里是「每生成一条就 onUpdateLinks 一次」⇒ N 条书签 = N 次整包 KV 写
+    //    （免费档 1000 写/天，整账号共享）。现在攒到跑完 / 用户点停止，只提交一次。
+    if (changed) onUpdateLinks(currentLinks);
     setIsProcessing(false);
   };
 
@@ -214,8 +221,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleDragOver = (e: React.DragEvent, targetId: string) => {
       e.preventDefault(); 
       if (!draggedId || draggedId === targetId) return;
-      
-      const newLinks = [...links];
+
+      const base = draftOrder ?? links;
+      const newLinks = [...base];
       const sourceIndex = newLinks.findIndex(l => l.id === draggedId);
       const targetIndex = newLinks.findIndex(l => l.id === targetId);
 
@@ -223,19 +231,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
       const [movedItem] = newLinks.splice(sourceIndex, 1);
       newLinks.splice(targetIndex, 0, movedItem);
-      
-      onUpdateLinks(newLinks);
+
+      // 【注意】这里只改界面顺序，**不落库**。
+      //    以前是直接 onUpdateLinks(newLinks)，而 dragover 在拖动过程中会连续触发几十上百次
+      //    ⇒ 每触发一次就整包 POST /api/storage（一次 KV 写）。CF 免费档 KV 只有 1000 写/天，
+      //    而且是**整个账号共享**的，一次拖动就能把当天额度烧掉一大截，还连带同账号别的项目。
+      setDraftOrder(newLinks);
+  };
+
+  /** 松手时提交一次；顺序没变就不发请求 */
+  const commitDraftOrder = () => {
+      const next = draftOrder;
+      setDraggedId(null);
+      setDraftOrder(null);
+      if (!next) return;
+      const same = next.length === links.length && next.every((l, i) => l.id === links[i]?.id);
+      if (same) return;
+      onUpdateLinks(next);
   };
 
   const handleDrop = (e: React.DragEvent) => {
       e.preventDefault();
+      commitDraftOrder();
+  };
+
+  /** 拖到窗口外 / 被浏览器取消 ⇒ 丢弃草稿，数据不动 */
+  const handleDragEnd = () => {
       setDraggedId(null);
+      setDraftOrder(null);
   };
 
   const filteredLinks = useMemo(() => {
-      if (filterCategory === 'all') return links;
-      return links.filter(l => l.categoryId === filterCategory);
-  }, [links, filterCategory]);
+      const base = draftOrder ?? links;
+      if (filterCategory === 'all') return base;
+      return base.filter(l => l.categoryId === filterCategory);
+  }, [draftOrder, links, filterCategory]);
 
   // Extension Generators v7.6
   const getManifestJson = () => {
@@ -378,7 +408,7 @@ function buildMenus() {
         // 创建一个统一的根菜单，同时支持 "page" (网页右键), "link" (链接右键), "action" (图标右键)
         chrome.contextMenus.create({
             id: "cloudnav_root",
-            title: \`⚡ 保存到 \${CONFIG.name}\`,
+            title: \`保存到 \${CONFIG.name}\`,
             contexts: ["page", "link", "action"]
         });
 
@@ -411,7 +441,7 @@ function updateMenuTitle(url) {
     // 检查是否存在
     const exists = linkCache.some(l => l.url && l.url.replace(/\\/$/, '').toLowerCase() === cleanUrl);
     
-    const newTitle = exists ? "⚠️ 已存在 - 保存到 " + CONFIG.name : "⚡ 保存到 " + CONFIG.name;
+    const newTitle = exists ? "已存在 - 保存到 " + CONFIG.name : "保存到 " + CONFIG.name;
     
     // 仅更新标题，不重绘整个菜单，性能更高
     chrome.contextMenus.update("cloudnav_root", { title: newTitle }, () => {
@@ -451,7 +481,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             // 如果已存在，再次保存通常意味着用户想更新或者不介意重复，
             // 但为了防止误操作，这里可以简单弹个确认，或者直接保存。
             // 由于 Context Menu 无法直接弹 confirm (除非注入脚本)，我们这里直接保存但提示已存在。
-            // 用户已经看到 "⚠️ 已存在" 的标题了，点击说明确实想存。
+            // 用户已经看到「已存在 - 保存到 XXX」的标题了，点击说明确实想存。
         }
 
         saveLink(title, url, catId);
@@ -1104,6 +1134,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         onDragStart={(e) => handleDragStart(e, link.id)}
                                         onDragOver={(e) => handleDragOver(e, link.id)}
                                         onDrop={handleDrop}
+                                        onDragEnd={handleDragEnd}
                                         className={`flex items-center gap-3 p-3 bg-white dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 ${draggedId === link.id ? 'opacity-50 border-blue-400 border-dashed' : 'hover:border-blue-300'}`}
                                     >
                                         <div className="cursor-move text-slate-400 hover:text-slate-600">
